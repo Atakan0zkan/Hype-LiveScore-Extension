@@ -1,240 +1,41 @@
-# HypeScore
+# Hype - Live Football Scores
 
-HypeScore is the source-available project behind
-[Hype - Live Football Scores](https://chromewebstore.google.com/detail/hype-live-football-scores/cdnpjnmhmagmiefkleefgchgffeaacaa),
-a lightweight Chrome Manifest V3 popup backed by a Cloudflare Worker.
+Check live football scores, recent results, and upcoming matches without leaving
+your tab.
 
-It shows live scores, results, upcoming fixtures, league tables, match details,
-and available FIFA World Cup 2030 fixtures without injecting scripts into websites.
+**[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/hype-live-football-scores/cdnpjnmhmagmiefkleefgchgffeaacaa)**
 
-## Features
+![Hype's league list with stars for saving favorite competitions](docs/images/hype-leagues.png)
 
-- 32 curated football competitions, including UEFA Nations League, UEFA EURO,
-  Copa América, FIFA World Cup, and major domestic and UEFA club competitions.
-- Live, completed, and upcoming matches in a compact popup.
-- League cards preview a popular live match or an available result, including
-  score and Live, Half Time, or Full Time status, without opening the league.
-- Lazy-loaded standings, proportional match statistics, compact horizontal
-  pitch lineups below the score, event timeline, and combined news/highlights.
-- Highlight videos are emphasized; scroll positions and open sections are
-  remembered while navigating within a popup session.
-- ESPN links and World Cup 2030 fixtures/rounds (subject to provider availability;
-  unpublished 2030 data stays empty, with no fallback to past tournaments).
-- Local favorite leagues, adaptive refresh, local score cache, and request
-  budget protection.
-- During a short provider outage, updated clients can show the last successful
-  scores for at most five minutes from their original update time.
-  Expired snapshots are removed instead of being presented as current scores.
-- Favorite competitions stay first; each group prioritizes live, upcoming,
-  then completed matches. Pitch lineups use reported starting positions when
-  both complete XIs are available, with named starters as a fallback.
-- Substitutes appear directly below the pitch without repeating the starting
-  XIs. Settings offer Small, Default, and Big popup sizes plus a local JSON
-  backup of favorite leagues and the selected size.
-- Small goal and card markers identify scorers and booked players on the pitch
-  when the provider supplies match-specific player statistics.
-- 55 interface locales with RTL support for Arabic, Hebrew, and Persian.
-- No account, advertisements, content scripts, or remote executable code.
+## Follow the matches that matter
 
-Club match previews use a bundled, approximate social-reach signal from
-[CIES Weekly Post 548](https://football-observatory.com/IMG/sites/b5wp/2025/wp548/en/)
-(May 2026), not real-time viewing figures. Live matches always take priority;
-unranked or equally ranked completed matches fall back to the latest kickoff.
+- See what's live, what's coming up, and what just finished.
+- Star your favorite leagues to keep them at the top.
+- Open a league for kick-off times, results, and standings.
+- Open a match for lineups, stats, and key moments when available.
+- Choose a popup size and back up your favorites and size preference from Settings.
 
-## Privacy
+Follow the Premier League, LaLiga, the Champions League, and more in the same
+popup.
 
-The extension sends functional football-data requests only to the Hype
-Cloudflare Worker. The Worker records limited aggregate usage and reliability
-metrics in Workers Analytics Engine.
+![An example LaLiga fixture and league table in Hype](docs/images/hype-fixtures.png)
 
-The product analytics dataset excludes raw IP addresses, persistent device
-identifiers, accounts, favorites, event IDs, browsing history, and cross-site
-activity. It is not used for advertising or profiling.
+## Get started
 
-See [PRIVACY.md](PRIVACY.md) for the user-facing notice and
-[SECURITY.md](SECURITY.md) for responsible disclosure.
+1. Install Hype from the Chrome Web Store.
+2. Open Chrome's Extensions menu and pin Hype to your toolbar.
+3. Click the Hype icon, then star any league you want to see first.
 
-## Architecture
+## Privacy and help
 
-```text
-Chrome MV3 popup
-       |
-       v
-Cloudflare Worker + Cache API
-       |
-       +--> ESPN public football endpoints
-       +--> optional TheSportsDB fallback
-       +--> Workers Analytics Engine
-```
+No account is needed. Favorites and display preferences stay in your browser.
+For details about the limited usage data Hype collects, see the
+[privacy notice](PRIVACY.md).
 
-The project has no frontend runtime dependencies and no build step. The
-extension source in `extension/` is the package loaded by Chrome.
-
-### Worker endpoints
-
-| Endpoint | Purpose |
-|---|---|
-| `GET /live-matches` | Curated live, result, and next-24-hour fixtures |
-| `GET /league-standings?leagueCode=...` | Lazy league table |
-| `GET /match-detail?eventId=...&leagueCode=...` | Lazy match detail |
-| `GET /tournament-bracket?leagueCode=fifa.world` | Lazy World Cup 2030 fixtures/rounds |
-
-## Run the extension locally
-
-1. Clone the repository.
-2. Open `chrome://extensions`.
-3. Enable **Developer mode**.
-4. Select **Load unpacked** and choose the `extension/` directory.
-
-The extension connects to the production API configured in
-`extension/popup.js`. To use another Worker, update that URL and the matching
-`host_permissions` entry in `extension/manifest.json`.
-
-## Development
-
-Use Node.js 26 and install the development dependencies:
-
-```powershell
-npm install
-```
-
-Run the local checks:
-
-```powershell
-npm test
-npm run security:check
-npm run verify
-npm run analytics:test
-npm run smoke
-npm run monitor
-npm run test:release
-```
-
-- `npm test` runs popup, Worker, and dashboard regression suites.
-- `npm run security:check` checks current source for known credential patterns,
-  accidentally tracked private files, and mutable remote workflow actions.
-- `npm run test:release` is the comprehensive pre-deploy gate: package/CSP and
-  size checks, regression tests, enforced coverage, dependency/secret audits,
-  native browser feature/security/accessibility/performance checks, and
-  read-only production API/browser checks. It saves a source fingerprint and
-  a PASS/FAIL report under the ignored `test-results/release-gate/` directory.
-  `-- --local-only` skips production probes and never reports deploy readiness.
-- `npm run verify -- --release --live` remains available and shares the same
-  validation plan, but the release command adds the consolidated report and
-  detects source changes during verification.
-  See [the release checklist](docs/RELEASE-CHECKLIST.md) for human review gates.
-- `npm audit --audit-level=moderate` checks development dependencies too; this
-  remains a blocking CI check. A version-scoped npm override replaces vulnerable
-  Undici 7.x pins with patched 7.x releases until the parent tools update them.
-  It does not force future Undici major versions back to 7.x.
-- `npm run analytics:test` validates dashboard queries and data shaping.
-- `npm run smoke` checks the deployed API and therefore requires internet
-  access.
-- `npm run monitor` confirms failures with a second probe 30 seconds later,
-  without opening or changing GitHub issues when run locally.
-
-GitHub tests run on pushes, pull requests, and daily at 07:00 Europe/Istanbul.
-Dependabot checks npm packages at 06:30 and GitHub Actions at 06:45 every day,
-then opens update pull requests. Compatible minor/patch updates are grouped;
-major changes stay separate. Pull requests run offline/browser tests and the
-dependency audit; merging and production deployment remain owner-approved.
-Daily runs also validate the Worker bundle and retain browser failure artifacts
-for seven days. A deterministic reporter maintains one bot-owned validation
-issue; it does not send logs to an AI provider or require an extra API key.
-
-Production availability is checked separately every five minutes. Cloudflare's
-cron exercises the data/cache/upstream-failover path; an independent GitHub
-workflow checks the public API, including standings, available match details and
-the intentionally empty future World Cup. GitHub schedules can be delayed.
-Confirmed repeated failures open one monitor-owned issue assigned to the owner;
-unchanged failures do not post repeated comments, and two healthy probes close
-the incident. Daily live checks are blocking and main-push checks wait for the
-matching Cloudflare build. No automatic code edits, deployments or merges are
-performed by the monitor.
-
-Health probes are excluded from Hype's product-usage dataset. Cloudflare's raw
-hosting/request metrics still include external monitoring traffic. GitHub uses
-its short-lived `GITHUB_TOKEN` with issue-write permission; no extra API key is
-required, and PR/fork code cannot run the incident-writing workflow.
-
-### Short-outage fallback
-
-The Worker keeps a separate last-successful scoreboard in its regional Cache
-API, capped at five minutes from the original data fetch. Only clients sending
-`allowStale=1` can receive this fallback: `freshness.stale` is true, the original
-`freshness.updatedAt` is preserved, and the response is `no-store`. Old clients
-do not receive degraded successful responses. Updated popups also have a
-bounded local fallback for a failed request. No freshness text or age banner
-is shown in the popup; displaying or re-reading a snapshot never renews its lifetime.
-
-Cache API data is not globally replicated, so a cold region with no recent
-snapshot can still return an error. Standings, details and World Cup season
-rules are unchanged. Cron and external monitors treat stale responses as
-degraded, not healthy, so the fallback does not hide provider outages. The
-popup's bounded fallback requires an updated extension package; changing the
-Worker alone does not update an already-installed Chrome Web Store client.
-
-## Deploy the Worker
-
-`wrangler.jsonc` is the canonical Cloudflare configuration.
-
-```powershell
-npx wrangler login
-npm run deploy
-```
-
-`npm run deploy` first runs the complete release gate and stops on a failure.
-It preserves existing Worker variables with `--keep-vars`. Direct Wrangler
-commands and Cloudflare Git-linked builds bypass npm's `predeploy` hook;
-they must be gated separately and are not reconfigured by this test suite.
-The release command itself never deploys, pushes, publishes or sends email.
-
-For token-based automation, provide `CLOUDFLARE_API_TOKEN` through the process
-environment. Never save Cloudflare credentials in the repository.
-
-The optional TheSportsDB live fallback requires its premium API key; its free
-v1 plan is not an independent live-score replacement. Store the key only as a
-Worker secret:
-
-```powershell
-npx wrangler secret put THESPORTSDB_API_KEY
-```
-
-## Local analytics dashboard
-
-The owner dashboard listens only on `127.0.0.1` and keeps Cloudflare
-credentials in the local server process.
-
-```powershell
-npm run analytics
-```
-
-The launcher prompts for a Cloudflare account ID and a scoped API token, then
-prints the local dashboard URL. Use a read-only analytics token for routine
-dashboard access and a separate deployment token for Worker updates.
-
-## Project layout
-
-```text
-extension/             Chrome extension runtime and locales
-worker/                Cloudflare Worker
-analytics-dashboard/   localhost-only owner dashboard
-tools/                 regression, smoke, locale audit, and QA helpers
-PRIVACY.md              privacy notice
-SECURITY.md             vulnerability reporting
-wrangler.jsonc          canonical Worker configuration
-```
-
-Generated store media, release archives, dependencies, local assistant context,
-and credentials are intentionally excluded from Git.
-
-## Package for Chrome Web Store
-
-Zip the contents of `extension/` so that `manifest.json` is at the archive
-root. Release archives belong in the ignored `dist/` directory.
+Have an idea or found a bug? [Open an issue](https://github.com/Atakan0zkan/Hype-LiveScore-Extension/issues).
+For security concerns, see [how to report them privately](SECURITY.md).
+For local setup and releases, see the [maintainer guide](docs/DEVELOPMENT.md).
 
 ## License
 
-This project is licensed under the [PolyForm Strict License 1.0.0](LICENSE).
-Commercial use, redistribution, and creating modified versions are not
-permitted without a separate written license from the copyright holder.
+[PolyForm Strict License 1.0.0](LICENSE).
