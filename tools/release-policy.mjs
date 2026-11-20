@@ -66,7 +66,9 @@ export function inspectExtension(root=ROOT){
     const src=match[1].match(/\bsrc=["']([^"']+)["']/)?.[1];requireValue(src&&!/^(?:[a-z]+:|\/\/)/i.test(src)&&!match[2].trim(),"Inline or remote script in popup");asset(src);
   }
   for(const match of html.matchAll(/\b(?:src|href)=["']([^"']+)["']/g))if(!/^(?:[a-z]+:|#|\/\/)/i.test(match[1]))asset(match[1]);
-  for(const match of read("popup.js").matchAll(/["'`](icons\/[^"'`?#]+\.(?:png|svg))(?:\?[^"'`]*)?["'`]/g))asset(match[1]);
+  for(const file of files.filter(file=>file.endsWith(".js"))){
+    for(const match of fs.readFileSync(file,"utf8").matchAll(/["'`](icons\/[^"'`?#]+\.(?:png|svg))(?:\?[^"'`]*)?["'`]/g))asset(match[1]);
+  }
   const locales=fs.readdirSync(path.join(directory,"_locales"),{withFileTypes:true}).filter(entry=>entry.isDirectory()).map(entry=>entry.name);
   requireValue(locales.length>=55&&locales.includes(manifest.default_locale),"Missing supported locales");
   const reference=JSON.parse(read("_locales/en/messages.json"));

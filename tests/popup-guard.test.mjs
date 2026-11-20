@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { loadPopupContext, livePayload, matchRow } from "./helpers.mjs";
+import { loadPopupContext, loadPopupSource, livePayload, matchRow } from "./helpers.mjs";
 
 describe("popup constants (budget contract)", () => {
   it("refresh tiers 60s/5m/30m, guards 10m/3m, daily 2000", async () => {
@@ -132,14 +132,13 @@ describe("popup display ordering + formatting", () => {
   });
 
   it("lazy error retry window 60s; ENG fallback covers all msg keys", async () => {
-    const { readFile } = await import("node:fs/promises");
     const { run } = await loadPopupContext();
     assert.equal(run(`isExpiredLazyError({ status: "error", failedAt: Date.now() })`), false);
     assert.equal(run(`isExpiredLazyError({ status: "error", failedAt: Date.now() - 61000 })`), true);
     assert.equal(run(`isExpiredLazyError({ status: "loading" })`), false);
     // ENG toggle renders via FALLBACK_MESSAGES when chrome.i18n is absent:
     // every msg() key must exist there (except extension identity keys).
-    const src = await readFile(new URL("../extension/popup.js", import.meta.url), "utf8");
+    const src = await loadPopupSource();
     const used = [...new Set([...src.matchAll(/msg\(\s*["']([A-Za-z0-9_]+)["']/g)].map((m) => m[1]))]
       .filter((k) => k !== "extName" && k !== "extDescription");
     const missing = [...run(`(${JSON.stringify(used)}).filter((k) => !(k in FALLBACK_MESSAGES))`)];

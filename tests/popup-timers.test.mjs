@@ -93,4 +93,32 @@ describe("popup timers: adaptive scheduling", () => {
     await app.eval("loadMatches()");
     assert.ok(app.eval("window.__cleared").includes(timerId), "previous timer cleared");
   });
+
+  it("stops refresh while hidden and resumes the remaining delay when visible", () => {
+    render();
+    app.eval(`lastFetchCompletedAt = Date.now() - 5000;
+      scheduleNextRefresh(lastPayload);
+      resetInactivityTimer();
+      Object.defineProperty(document, "hidden", { value: true, writable: true });
+      document.dispatchEvent(new Event("visibilitychange"));`);
+    assert.ok(app.eval("window.__cleared").includes(app.eval("refreshTimer")));
+    assert.ok(app.eval("window.__cleared").includes(app.eval("inactivityTimer")));
+    app.eval(`window.__calls = [];
+      document.hidden = false;
+      document.dispatchEvent(new Event("visibilitychange"));`);
+    assert.ok(delays().includes(180000), "inactivity timer restored");
+    const next = delays().at(-1);
+    assert.ok(next > 50000 && next <= 55000, "visible refresh keeps the remaining delay");
+  });
+
+  it("resumes from inactivity on interaction but honors an expired session", () => {
+    render();
+    app.eval("lastFetchCompletedAt = Date.now(); scheduleNextRefresh(lastPayload); handleInactivityPause()");
+    assert.equal(app.eval("__T.inactivePaused"), true);
+    assert.ok(app.eval("window.__cleared").includes(app.eval("refreshTimer")));
+    app.document.dispatchEvent(new app.window.Event("mousemove"));
+    assert.equal(app.eval("__T.inactivePaused"), false);
+    app.eval("sessionStartedAt = Date.now() - AUTO_PAUSE_AFTER_MS; handleVisibilityChange()");
+    assert.equal(app.eval("__T.autoPausedForSession"), true);
+  });
 });

@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 
-const WORKER_SOURCE_URL = new URL("../worker/index.js", import.meta.url);
 const ALLOWED_ORIGIN_A = "chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const ALLOWED_ORIGIN_B = "chrome-extension://bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const KNOWN_EVENT_ID = "760486";
@@ -60,9 +58,7 @@ globalThis.fetch = async (input) => {
   return jsonResponse({ leagues: [], events: [] });
 };
 
-const workerSource = await readFile(WORKER_SOURCE_URL, "utf8");
-const workerModuleUrl = `data:text/javascript;base64,${Buffer.from(workerSource).toString("base64")}`;
-const { default: worker } = await import(workerModuleUrl);
+const { default: worker } = await import("../worker/index.js");
 
 const liveRequestA = createApiRequest(
   "/live-matches?client=extension&version=1.6",

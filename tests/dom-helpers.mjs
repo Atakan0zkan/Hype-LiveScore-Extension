@@ -1,22 +1,19 @@
 import { Window } from "happy-dom";
-import { readFile } from "node:fs/promises";
+import vm from "node:vm";
+import { loadPopupAssets, runPopupScripts } from "./helpers.mjs";
 
-// Full popup runtime in a real DOM (popup.html + popup.js, no mocks
-// except fetch). Each call returns an isolated window.
+// Full popup runtime in an isolated DOM, using the same script order as Chrome.
 export async function loadPopupDOM({ fetchImpl = null, storage = {}, manifestVersion = null } = {}) {
-  const html = await readFile(new URL("../extension/popup.html", import.meta.url), "utf8");
-  const js = await readFile(new URL("../extension/popup.js", import.meta.url), "utf8");
+  const { html } = await loadPopupAssets();
   const window = new Window({ url: "chrome-extension://test/popup.html" });
   if (manifestVersion !== null) window.chrome = { runtime: { getManifest: () => ({ version: manifestVersion }) } };
   for (const [key, value] of Object.entries(storage)) window.localStorage.setItem(key, value);
   if (fetchImpl) window.fetch = fetchImpl;
   window.document.write(html);
-  // NOTE: happy-dom runs each eval() in a fresh lexical scope sharing one
-  // global object. `function` declarations survive (global object props) but
-  // top-level `let/const` do not. The bridge below is appended to the SAME
-  // eval as the popup source so it can close over those bindings. It is
-  // test-only; the shipped popup.js is untouched.
-  window.eval(`${js}\n;window.__T = {
+  // Run each script in Happy DOM's same window context so its lexical
+  // bindings and per-file coverage match the classic popup scripts.
+  await runPopupScripts(window);
+  vm.runInContext(`window.__T = {
     get lastPayload(){ return lastPayload; }, set lastPayload(v){ lastPayload = v; },
     get selectedLeagueKey(){ return selectedLeagueKey; },
     get selectedMatchKey(){ return selectedMatchKey; },
@@ -36,7 +33,7 @@ export async function loadPopupDOM({ fetchImpl = null, storage = {}, manifestVer
     get standingsCache(){ return leagueStandingsCache; },
     get detailCache(){ return matchDetailCache; },
     renderLast(){ renderPayload(lastPayload); },
-  };\n//# sourceURL=${new URL("../extension/popup.js", import.meta.url).href}`);
+  };`, window);
   // happy-dom does not fire DOMContentLoaded for document.write() before the
   // script registers its listener, so boot the popup explicitly. The handler
   // only (re)assigns element refs and listeners, so a later native fire is
@@ -45,7 +42,7 @@ export async function loadPopupDOM({ fetchImpl = null, storage = {}, manifestVer
   return {
     window,
     document: window.document,
-    eval: (expr) => window.eval(expr),
+    eval: (expr) => vm.runInContext(expr, window),
     close: () => window.happyDOM.close(),
   };
 }

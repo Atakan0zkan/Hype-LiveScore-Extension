@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { request as httpRequest } from "node:http";
 import { getDashboardPayload, shapeDashboardData, server } from "../analytics-dashboard/server.mjs";
+import { runPopupScripts, runWorkerScripts } from "../tests/helpers.mjs";
 
-const workerSource = await readFile(new URL("../worker/index.js", import.meta.url), "utf8");
 let deadline;
 let cleared = false;
 const workerContext = vm.createContext({
@@ -19,7 +18,7 @@ const workerContext = vm.createContext({
     }),
   }),
 });
-vm.runInContext(workerSource.replace("export default", "const worker ="), workerContext);
+await runWorkerScripts(workerContext);
 const bodyRead = vm.runInContext("fetchJson(ESPN_SCOREBOARD_URL)", workerContext);
 const bodyFailure = assert.rejects(bodyRead, /Body aborted/);
 await new Promise(setImmediate);
@@ -35,7 +34,6 @@ assert.equal(vm.runInContext("normalizeLineups({rosters: [null]}).length", worke
 assert.equal(vm.runInContext("normalizeBroadcasts([{names: {}}]).length", workerContext), 0);
 assert.equal(vm.runInContext("normalizeEspnStandings({standings: {entries: [null, {stats: [null, {name: 'pointDifferential', value: 4}]}]}})[0].goalDifference", workerContext), "4");
 
-const popupSource = await readFile(new URL("../extension/popup.js", import.meta.url), "utf8");
 const storage = new Map();
 const popupContext = vm.createContext({
   URL, AbortController, console, setTimeout, clearTimeout,
@@ -47,7 +45,7 @@ const popupContext = vm.createContext({
     removeItem: (key) => storage.delete(key),
   },
 });
-vm.runInContext(popupSource, popupContext);
+await runPopupScripts(popupContext);
 const match = { id: "760486", leagueCode: "eng.1", homeTeam: "Home", awayTeam: "Away", state: "live" };
 const payload = { matches: [match], leagues: ["fifa.world", "uefa.nations", "uefa.euro", "conmebol.america"].map((code) => ({ code, name: code, matches: [] })) };
 const cache = { version: "v12", payload, savedAt: Date.now() };

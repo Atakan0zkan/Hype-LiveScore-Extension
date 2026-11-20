@@ -1,15 +1,64 @@
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
+import { readPopupSources } from "../tools/popup-sources.mjs";
 
 const ROOT = new URL("../", import.meta.url);
+const WORKER_ENTRY = new URL("worker/index.js", ROOT);
+const WORKER_IMPORT = /^import \{[^}]*\} from "(\.\/[a-z0-9-]+\.js)";$/gm;
+const WORKER_EXPORT = /^export \{[^}]*\};$/gm;
+let popupSources;
+let workerSources;
+
+export function loadPopupAssets() {
+  return popupSources ??= readPopupSources();
+}
+
+async function readWorkerModules() {
+  const modules = new Map();
+  const pending = new Set();
+  async function visit(url) {
+    if (modules.has(url.href)) return;
+    if (pending.has(url.href)) throw new Error("Circular Worker dependency: " + url.href);
+    pending.add(url.href);
+    const source = await readFile(url, "utf8");
+    for (const [, path] of source.matchAll(WORKER_IMPORT)) await visit(new URL(path, url));
+    pending.delete(url.href);
+    modules.set(url.href, { url, source });
+  }
+  await visit(WORKER_ENTRY);
+  return [...modules.values()];
+}
+
+function loadWorkerModules() {
+  return workerSources ??= readWorkerModules();
+}
 
 export async function loadWorkerSource() {
-  return readFile(new URL("../worker/index.js", import.meta.url), "utf8");
+  return (await loadWorkerModules()).map(module => module.source).join("\n");
 }
 
 export async function loadPopupSource() {
-  return readFile(new URL("../extension/popup.js", import.meta.url), "utf8");
+  return (await loadPopupAssets()).scripts.map(script => script.source).join("\n");
+}
+
+export async function runPopupScripts(ctx) {
+  for (const { url, source } of (await loadPopupAssets()).scripts) {
+    vm.runInContext(source, ctx, { filename: fileURLToPath(url) });
+  }
+}
+
+export async function runWorkerScripts(ctx) {
+  // Unit probes use isolated VM globals and address internal bindings by name.
+  // Link the Worker's local named imports in dependency order, retaining source
+  // filenames and line offsets. The standalone regression also runs native ESM.
+  const blank = declaration => declaration.replace(/[^\r\n]/g, " ");
+  for (const { url, source } of await loadWorkerModules()) {
+    const runnable = source.replace(WORKER_IMPORT, blank)
+      .replace(WORKER_EXPORT, blank)
+      .replace(/^export default /m, "const __workerDefault = ");
+    vm.runInContext(runnable, ctx, { filename: fileURLToPath(url) });
+  }
 }
 
 // Minimal VM for worker pure functions. No network, no deps.
@@ -27,8 +76,7 @@ export async function loadWorkerContext(overrides = {}) {
     },
     ...overrides.globals,
   });
-  const runnable = source.replace("export default", "const __workerDefault =");
-vm.runInContext(`${runnable}\nglobalThis.__W = { normalizeEspnMatches: typeof normalizeEspnMatches !== "undefined" ? normalizeEspnMatches : undefined, normalizeTimeline: typeof normalizeTimeline !== "undefined" ? normalizeTimeline : undefined, normalizeBroadcasts: typeof normalizeBroadcasts !== "undefined" ? normalizeBroadcasts : undefined, groupMatchesByLeague: typeof groupMatchesByLeague !== "undefined" ? groupMatchesByLeague : undefined, handleRequest: typeof handleRequest !== "undefined" ? handleRequest : undefined, isSafeEventId: typeof isSafeEventId !== "undefined" ? isSafeEventId : undefined, isChromeExtensionOrigin: typeof isChromeExtensionOrigin !== "undefined" ? isChromeExtensionOrigin : undefined, getRequestOriginPolicy: typeof getRequestOriginPolicy !== "undefined" ? getRequestOriginPolicy : undefined };`, ctx, { filename: fileURLToPath(new URL("../worker/index.js", import.meta.url)) });
+  await runWorkerScripts(ctx);
   return { ctx, run: (expr) => vm.runInContext(expr, ctx), source };
 }
 
@@ -89,7 +137,7 @@ export async function loadPopupContext() {
       removeItem: (k) => storage.delete(k),
     },
   });
-  vm.runInContext(source, ctx, { filename: fileURLToPath(new URL("../extension/popup.js", import.meta.url)) });
+  await runPopupScripts(ctx);
   return { ctx, run: (expr) => vm.runInContext(expr, ctx), storage, source };
 }
 

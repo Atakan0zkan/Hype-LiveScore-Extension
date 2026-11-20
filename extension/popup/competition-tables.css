@@ -1,0 +1,390 @@
+/* ── World Cup knockout bracket ────────────── */
+
+.tournament-bracket {
+  margin: 12px 14px 0;
+}
+
+.bracket-message {
+  margin: 0;
+  padding: 0 12px 12px;
+  color: var(--muted);
+  font-family: "Trebuchet MS", Verdana, sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.bracket-message--error {
+  color: var(--danger);
+}
+
+.bracket-rounds {
+  display: grid;
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+
+.bracket-round {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.bracket-round-title {
+  margin: 0;
+  color: var(--accent-strong);
+  font-family: "Trebuchet MS", Verdana, sans-serif;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bracket-match-list {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.bracket-match-card {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  border: 1px solid rgba(214, 91, 86, 0.1);
+  border-radius: 15px;
+  padding: 9px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.bracket-match-card--clickable {
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease;
+}
+
+.bracket-match-card--clickable:hover,
+.bracket-match-card--clickable:focus-visible {
+  outline: none;
+  border-color: rgba(214, 91, 86, 0.32);
+  background: rgba(255, 200, 200, 0.08);
+  transform: translateY(-1px);
+}
+
+.bracket-match-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-family: "Trebuchet MS", Verdana, sans-serif;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.bracket-match-date,
+.bracket-match-status {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bracket-match-status {
+  flex: 0 0 auto;
+  color: var(--accent-strong);
+}
+
+.bracket-teams {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.bracket-team-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 22px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 7px;
+}
+
+.bracket-team-logo {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.bracket-team-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-family: "Trebuchet MS", Verdana, sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bracket-team-score {
+  color: var(--accent-strong);
+  font-family: "Trebuchet MS", Verdana, sans-serif;
+  font-size: 15px;
+  font-weight: 900;
+  text-align: right;
+}
+
+/* ── Standings ──────────────────────────────── */
+
+.standings {
+  margin: 12px 14px 14px;
+  border: 1px solid rgba(214, 91, 86, 0.1);
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.standings-title {
+  margin: 0;
+  padding: 10px 11px 2px;
+  color: var(--accent-strong);
+  font-family: "Trebuchet MS", Verdana, sans-serif;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.standings-message {
+  margin: 0;
+  padding: 12px;
+  color: var(--muted);
+  font-family: "Trebuchet MS", Verdana, sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.standings-message--error {
+  color: var(--danger);
+}
+
+.standings-table-wrap {
+  overflow-x: hidden;
+  overflow-y: hidden;
+}
+
+.standings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: "Trebuchet MS", Verdana, sans-serif;
+  font-size: 10px;
+  table-layout: fixed;
+}
+
+.standings-table th,
+.standings-table td {
+  padding: 7px 2px;
+  border-top: 1px solid rgba(214, 91, 86, 0.08);
+  color: var(--ink);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.standings-table th:first-child,
+.standings-table td:first-child {
+  width: 24px;
+}
+
+.standings-table th:nth-child(2),
+.standings-table td:nth-child(2) {
+  overflow: hidden;
+  width: auto;
+  text-align: left;
+  text-overflow: ellipsis;
+}
+
+.standings-table th:nth-child(n + 3),
+.standings-table td:nth-child(n + 3) {
+  width: 28px;
+}
+
+.standings-table th:nth-child(9),
+.standings-table td:nth-child(9),
+.standings-table th:nth-child(10),
+.standings-table td:nth-child(10) {
+  width: 32px;
+}
+
+.standings-table th:nth-child(4),
+.standings-table td:nth-child(4) {
+  color: #60e991;
+}
+
+.standings-table th:nth-child(5),
+.standings-table td:nth-child(5) {
+  color: #f2a83b;
+}
+
+.standings-table th:nth-child(6),
+.standings-table td:nth-child(6) {
+  color: #c44d4d;
+}
+
+.standings-table th {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  /* Some scripts need more room than Latin abbreviations. Keep the full
+     translated heading readable instead of overlapping adjacent columns. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.standings-table th:nth-child(4) {
+  color: #75f2a4;
+}
+
+.standings-table th:nth-child(5) {
+  color: #ffb650;
+}
+
+.standings-table th:nth-child(6) {
+  color: #d75a5a;
+}
+
+.standings-table td {
+  font-weight: 800;
+}
+
+.standings-position {
+  position: relative;
+}
+
+.standings-position--champions-league { --standings-zone-color: #73a9ff; }
+.standings-position--europa-league { --standings-zone-color: #ffb45e; }
+.standings-position--conference-league { --standings-zone-color: #76dba1; }
+.standings-position--relegation, .standings-position--elimination { --standings-zone-color: #ff6b72; }
+
+.standings-position[class*="standings-position--"]::before {
+  content: "";
+  position: absolute;
+  inset-block: 5px;
+  inset-inline-start: 0;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--standings-zone-color);
+}
+
+.standings-position.standings-position--conditional::before {
+  background: repeating-linear-gradient(to bottom, var(--standings-zone-color) 0 4px, transparent 4px 6px);
+}
+
+.standings-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  gap: 8px 12px;
+  margin: 12px 0 0;
+  padding: 0 12px 12px;
+  list-style: none;
+  color: var(--muted);
+  font: 700 10px/1.45 "Trebuchet MS", Verdana, sans-serif;
+}
+
+.standings-legend-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.standings-legend-item > span:last-child {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.standings-legend-marker {
+  display: inline-block;
+  flex: 0 0 3px;
+  width: 3px;
+  height: 13px;
+  margin-top: 1px;
+  border-radius: 3px;
+  background: var(--standings-zone-color);
+}
+
+.standings-legend-marker--conditional {
+  background: repeating-linear-gradient(to bottom, var(--standings-zone-color) 0 4px, transparent 4px 6px);
+}
+
+.standings-group-cell {
+  color: var(--accent-strong) !important;
+  background: rgba(214, 75, 69, 0.1);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-align: left !important;
+  text-transform: uppercase;
+}
+
+.standings-team {
+  display: inline-flex;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+}
+
+.standings-team-logo {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  border-radius: 5px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.standings-team-name {
+  overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Disabled state (power off) ─────────────── */
+
+.app-shell--disabled > :not(.hero):not(.settings-panel):not(.content-overlay) {
+  filter: grayscale(1) brightness(0.6);
+  transition: filter 0.3s ease;
+}
+
+.app-shell--disabled .power-toggle {
+  filter: none;
+}
+
+.app-shell--disabled .language-toggle {
+  filter: none;
+}
+
+.content-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

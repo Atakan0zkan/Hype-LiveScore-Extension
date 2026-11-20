@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Hype - Live Football Scores</title>
     <link rel="stylesheet" href="popup.css">
+    <link rel="stylesheet" href="popup/leagues.css">
+    <link rel="stylesheet" href="popup/matches.css">
+    <link rel="stylesheet" href="popup/competition-tables.css">
   </head>
   <body>
     <main class="app-shell">
@@ -102,6 +105,15 @@
       </section>
     </main>
 
+    <!-- Shared popup scripts load before the controller registers its boot handler. -->
+    <script src="popup/config.js"></script>
+    <script src="popup/i18n.js"></script>
+    <script src="popup/dom.js"></script>
+    <script src="popup/preferences.js"></script>
+    <script src="popup/live-data.js"></script>
+    <script src="popup/leagues.js"></script>
+    <script src="popup/matches.js"></script>
+    <script src="popup/competition-tables.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

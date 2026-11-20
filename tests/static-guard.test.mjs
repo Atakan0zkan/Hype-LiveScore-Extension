@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import { validateLocaleMessages } from "../tools/locale-validation.mjs";
+import { loadPopupAssets, loadPopupSource, loadWorkerSource } from "./helpers.mjs";
 
 const ROOT = new URL("../", import.meta.url);
 const read = (p) => readFile(new URL(p, ROOT), "utf8");
@@ -57,8 +58,8 @@ describe("static release guards (regression watchlist as code)", () => {
   });
 
   it("no injection / eval primitives in runtime", async () => {
-    const popup = await read("extension/popup.js");
-    const worker = await read("worker/index.js");
+    const popup = await loadPopupSource();
+    const worker = await loadWorkerSource();
     for (const [name, src] of [["popup", popup], ["worker", worker]]) {
       for (const bad of ["innerHTML", "outerHTML", "insertAdjacentHTML", "document.write"]) {
         assert.ok(!src.includes(bad), `${name} contains ${bad}`);
@@ -71,8 +72,8 @@ describe("static release guards (regression watchlist as code)", () => {
   });
 
   it("no fixed 15s refresh, no 100vh root collapse", async () => {
-    const popup = await read("extension/popup.js");
-    const css = await read("extension/popup.css");
+    const popup = await loadPopupSource();
+    const css = (await loadPopupAssets()).styles.map(style => style.source).join("\n");
     assert.ok(!popup.includes("15000"), "15s loop must not return");
     assert.ok(!/100vh/.test(css), "100vh collapses MV3 popup");
   });
@@ -88,7 +89,7 @@ describe("static release guards (regression watchlist as code)", () => {
       const m = JSON.parse(await read(`extension/_locales/${loc}/messages.json`));
       assert.deepEqual(validateLocaleMessages(loc, m, en), [], loc);
     }
-    const popup = await read("extension/popup.js");
+    const popup = await loadPopupSource();
     const used = new Set([...popup.matchAll(/msg\(\s*["']([A-Za-z0-9_]+)["']/g)].map((x) => x[1]));
     for (const k of used) {
       assert.ok(k in en || k === "extName" || k === "extDescription", `msg key missing: ${k}`);
@@ -102,9 +103,9 @@ describe("static release guards (regression watchlist as code)", () => {
     assert.equal(pngs.length, 32, pngs.join(",").slice(0, 200));
   });
 
-  it("popup.html ids match popup.js lookups", async () => {
+  it("popup.html ids match popup script lookups", async () => {
     const html = await read("extension/popup.html");
-    const popup = await read("extension/popup.js");
+    const popup = await loadPopupSource();
     const ids = [...new Set([...popup.matchAll(/getElementById\("([^"]+)"\)/g)].map((m) => m[1]))];
     assert.ok(ids.length > 5, `lookups=${ids.length}`);
     // statusBar was intentionally removed from the header; setStatus() is a
@@ -126,8 +127,8 @@ describe("static release guards (regression watchlist as code)", () => {
   });
 
   it("no secrets baked into runtime source", async () => {
-    const worker = await read("worker/index.js");
-    const popup = await read("extension/popup.js");
+    const worker = await loadWorkerSource();
+    const popup = await loadPopupSource();
     for (const pat of ["THESPORTSDB_API_KEY=", "cfat_", "api_token", "API_TOKEN="]) {
       assert.ok(!worker.includes(pat), `worker leaks ${pat}`);
       assert.ok(!popup.includes(pat), `popup leaks ${pat}`);

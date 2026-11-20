@@ -3,11 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isOptionalCountMessage, validateLocaleMessages } from "./locale-validation.mjs";
+import { readPopupSources } from "./popup-sources.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dir = path.join(ROOT, "extension/_locales");
 const read = file => fs.readFileSync(path.join(ROOT, file), "utf8");
-const popup = read("extension/popup.js");
+const popup = (await readPopupSources()).scripts.map(script => script.source).join("\n");
 const en = JSON.parse(read("extension/_locales/en/messages.json"));
 const codes = fs.readdirSync(dir).filter(code => fs.statSync(path.join(dir, code)).isDirectory()).sort();
 const issues = [];

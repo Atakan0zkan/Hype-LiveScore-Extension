@@ -189,6 +189,50 @@ describe("popup future-tournament safeguards", () => {
       assert.equal(app.document.querySelectorAll(".bracket-message--error,.standings-message--error").length, 0);
     } finally { await app.close(); }
   });
+
+  it("renders a verified future round and opens the scheduled match by keyboard", async () => {
+    const league = { code: "fifa.world", name: "FIFA World Cup", matches: [] };
+    const match = {
+      id: "760489", leagueCode: league.code, kickoff: "2030-07-10T20:00:00Z",
+      homeTeam: "Home FC", awayTeam: "Away FC", homeScore: 0, awayScore: 0,
+      state: "scheduled", status: "Scheduled",
+    };
+    const responses = {
+      "/live-matches": { matches: [], leagues: [league] },
+      "/tournament-bracket": { seasonYear: 2030, rounds: [{ slug: "semifinals", matches: [
+        match, { ...match, id: "760490", kickoff: "2026-07-19T18:00:00Z", homeTeam: "Past Team" },
+      ] }] },
+      "/league-standings": { seasonYear: 2030, standings: [] },
+      "/match-detail": {},
+    };
+    const calls = [];
+    const app = await loadPopupDOM({ fetchImpl: async (url) => {
+      const request = new URL(url);
+      calls.push(request);
+      assert.ok(Object.hasOwn(responses, request.pathname));
+      return workerJson(responses[request.pathname]);
+    } });
+    try {
+      await app.eval("liveLoadPromise");
+      app.document.querySelector(".league-pick-card").click();
+      await new Promise(setImmediate);
+
+      const title = app.document.querySelector(".bracket-round-title");
+      assert.equal(title.textContent, app.eval('msg("semifinals")'));
+      assert.equal(app.document.querySelectorAll(".bracket-match-card").length, 1);
+      const card = app.document.querySelector(".bracket-match-card");
+      assert.equal(card.getAttribute("role"), "button");
+      assert.equal(card.tabIndex, 0);
+      assert.match(card.getAttribute("aria-label"), /Home FC.*Away FC/);
+      assert.deepEqual([...card.querySelectorAll(".bracket-team-score")].map(score => score.textContent), ["-", "-"]);
+      card.dispatchEvent(new app.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      await new Promise(setImmediate);
+      assert.ok(app.document.querySelector(".match-detail-hero"));
+      assert.ok(calls.some(url => url.pathname === "/match-detail" && url.searchParams.get("eventId") === match.id));
+    } finally {
+      await app.close();
+    }
+  });
 });
 
 describe("dependency maintenance automation", () => {

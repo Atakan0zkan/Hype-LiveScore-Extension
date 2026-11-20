@@ -1,76 +1,8 @@
 import { test, expect, chromium } from "@playwright/test";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import crypto from "node:crypto";
-
-// Test-only manifest key: pins a deterministic extension ID for the suite.
-// NOT a secret (local test ID derivation only, never shipped).
-const TEST_KEY_B64 =
-  "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArCNyjzFSMwVpOyTorAhxcenmenBDK1679y5WVovURgCfEWyb7t+esq+L3s8KC+ELqSvuFiNGK1dVgvtj+cA5fr7pLY39yJ2N6Z2XIGB88zd8d/qKyZ0isuyZ9tn4/jYQNcCTpmM9Dldn/8T+e3ld2JaEv5+13WHJursI3MML+xGwd6csBXn7KP9HuSPePi9VSCOy7aXHyQpEfqMl5Hz1jVF3B7CD5gFd7oLik1XQ+bAvDCHvC91zJwvh/xoZxMDXRvmLS0OUBy1URkpU5NpnA60M1fxHw49aRKPnUxelAXuQtqteDEUWo6IOuDlnRG5htk5Ob+VOtcmu6FQ2pqgjzQIDAQAB";
-
-function extensionIdFromKey(base64Key) {
-  const der = Buffer.from(base64Key, "base64");
-  const hash = crypto.createHash("sha256").update(der).digest().subarray(0, 16);
-  let id = "";
-  for (const byte of hash) {
-    id += String.fromCharCode(97 + (byte >> 4)) + String.fromCharCode(97 + (byte & 15));
-  }
-  return id;
-}
-
-const EXT_ID = extensionIdFromKey(TEST_KEY_B64);
-const POPUP_URL = `chrome-extension://${EXT_ID}/popup.html`;
-
-const now = Date.now();
-const LEAGUES = [
-  {
-    code: "eng.1", name: "Premier League", logoTone: "dark",
-    matches: [
-      { id: "e2e1", leagueCode: "eng.1", homeTeam: "Arsenal", awayTeam: "Chelsea", homeScore: 2, awayScore: 1, state: "live", status: "2H", minute: "67'", kickoff: new Date(now).toISOString(), venue: "Emirates" },
-      { id: "e2e2", leagueCode: "eng.1", homeTeam: "Spurs", awayTeam: "Villa", homeScore: 0, awayScore: 0, state: "scheduled", status: "Scheduled", kickoff: new Date(now + 2 * 3600 * 1000).toISOString(), venue: "" },
-      { id: "e2e4", leagueCode: "eng.1", homeTeam: "Liverpool", awayTeam: "City", homeScore: 1, awayScore: 1, state: "finished", status: "FT", kickoff: new Date(now - 3 * 3600 * 1000).toISOString(), venue: "Anfield" },
-    ],
-  },
-  { code: "esp.1", name: "LaLiga", logoTone: "dark", matches: [] },
-  {
-    code: "ita.1", name: "Serie A", logoTone: "dark",
-    matches: [
-      { id: "e2e3", leagueCode: "ita.1", homeTeam: "Inter", awayTeam: "Milan", homeScore: 1, awayScore: 1, state: "finished", status: "FT", kickoff: new Date(now - 3 * 3600 * 1000).toISOString(), venue: "San Siro" },
-    ],
-  },
-];
-const ALL_MATCHES = LEAGUES.flatMap((l) => l.matches);
-const STANDINGS = [
-  { position: 1, team: "Arsenal", logo: null, played: 10, wins: 8, draws: 1, losses: 1, goalsFor: 20, goalsAgainst: 8, goalDifference: "+12", points: 25, zone: {kind:"champions-league",phase:"direct"} },
-  { position: 2, team: "Chelsea", logo: null, played: 10, wins: 7, draws: 2, losses: 1, goalsFor: 18, goalsAgainst: 9, goalDifference: "+9", points: 23, zone: {kind:"europa-league",phase:"qualifying"} },
-  ...[
-    ["Conference fixture", 4, "conference-league", "qualifying"],
-    ["Playoff fixture", 17, "relegation", "playoff"],
-    ["Relegation fixture", 18, "relegation", "direct"],
-  ].map(([team, position, kind, phase]) => ({position,team,logo:null,played:10,wins:2,draws:3,losses:5,goalsFor:8,goalsAgainst:20,goalDifference:"-12",points:9,zone:{kind,phase}})),
-];
-const DETAIL = {
-  id: "e2e1", leagueCode: "eng.1", title: "Arsenal vs Chelsea",
-  teams: { home: { name: "Arsenal" }, away: { name: "Chelsea" } },
-  timeline: [
-    { minute: "0'", type: "Kickoff", kind: "kickoff" },
-    { minute: "23'", type: "Goal", kind: "goal", team: "Arsenal", players: ["Home Forward"], text: "Home Forward scores from inside the penalty area." },
-    { minute: "45'+3'", type: "Yellow Card", kind: "yellow-card", team: "Chelsea", players: ["Away Defender"] },
-  ],
-  stats: [{ label: "Shots", homeValue: "5", awayValue: "10" }, { label: "Possession", homeValue: "35%", awayValue: "65%" }],
-  lineups: ["Arsenal", "Chelsea"].map((team, index) => ({
-    team, homeAway: index ? "away" : "home", formation: "4-2-3-1",
-    players: ["G", "LB", "CD-L", "CD-R", "RB", "LM", "RM", "AM-L", "AM", "AM-R", "F"].map((position, i) => ({
-      id: `${index}-${i}`, name: ["Antonín Kinsky", "Destiny Udogie", "Micky van de Ven", "Kevin Danso", "Pedro Porro", "Conor Gallagher", "João Palhinha", "Mathys Tel", "Rodrigo Bentancur", "Randal Kolo Muani", "Dominic Calvert-Lewin"][i], jersey: String(i + 1), position, starter: true,
-      goals: i === 1 ? 5 : i === 10 ? 2 : 0, yellowCards: i === 1 ? 2 : 0, redCards: i === 1 ? 1 : 0,
-    })).concat([
-      { id: `${index}-sub-1`, name: `${team} Substitute One`, jersey: "12", position: "M", starter: false },
-      { id: `${index}-sub-2`, name: `${team} Substitute Two`, jersey: "13", position: "F", starter: false },
-    ]),
-  })), news: [{ title: "Match report", url: "https://www.espn.com/soccer/report/_/gameId/740954" }],
-  videos: [{ title: "Watch the match highlights", url: "https://www.espn.com/video/clip/_/id/12345" }], links: [],
-};
+import { launchUnpackedExtension } from "../browser/unpacked-extension.mjs";
+import { ALL_MATCHES, DETAIL, LEAGUES, STANDINGS } from "../browser/league-scenario.mjs";
 
 test.describe.configure({ mode: "serial" });
 
@@ -78,37 +10,14 @@ let context;
 let page;
 let apiCalls;
 let extDir;
-let profileDir;
+let popupUrl;
+let extension;
 const consoleErrors = [];
 const pageErrors = [];
 
 test.beforeAll(async () => {
-  // Copy to a no-space temp path (spaces break --load-extension handling).
-  const runId = `hype-e2e-${process.pid}`;
-  const root = path.join(os.tmpdir(), runId).replace(/ /g, "");
-  if (path.dirname(path.resolve(root)) !== path.resolve(os.tmpdir())) {
-    throw new Error("The extension test directory must be a direct child of the temporary directory without spaces");
-  }
-  extDir = path.join(root, "ext");
-  profileDir = path.join(root, "profile");
-  fs.rmSync(root, { recursive: true, force: true });
-  fs.cpSync(path.resolve("extension"), extDir, { recursive: true });
-  const manifestPath = path.join(extDir, "manifest.json");
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-  manifest.key = TEST_KEY_B64;
-  fs.writeFileSync(manifestPath, JSON.stringify(manifest));
-  expect(extensionIdFromKey(manifest.key)).toBe(EXT_ID);
-
-  const launchOptions = {
-    headless: false,
-    args: [`--disable-extensions-except=${extDir}`, `--load-extension=${extDir}`],
-  };
-  if (process.env.E2E_BROWSER_PATH) {
-    launchOptions.executablePath = process.env.E2E_BROWSER_PATH;
-  } else {
-    launchOptions.channel = "chromium";
-  }
-  context = await chromium.launchPersistentContext(profileDir, launchOptions);
+  extension = await launchUnpackedExtension();
+  ({ context, extDir, url: popupUrl } = extension);
   apiCalls = [];
   await context.route("**://api.atakanozkan.com/**", async (route) => {
     const url = new URL(route.request().url());
@@ -130,13 +39,12 @@ test.beforeAll(async () => {
   await page.setViewportSize({ width: 580, height: 600 });
   page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
   page.on("pageerror", (e) => pageErrors.push(String(e)));
-  await page.goto(POPUP_URL, { waitUntil: "domcontentloaded" });
+  await page.goto(popupUrl, { waitUntil: "domcontentloaded" });
   await page.locator(".league-pick-card").first().waitFor({ timeout: 15000 });
 });
 
 test.afterAll(async () => {
-  await context?.close();
-  fs.rmSync(path.dirname(extDir), { recursive: true, force: true });
+  await extension?.close();
 });
 
 test.beforeEach(async () => {
@@ -229,7 +137,7 @@ test("single-score hero, larger uncropped crests and unlabelled lineups fit ever
   const match = { ...ALL_MATCHES[0], homeTeam:"Everton", awayTeam:"Coventry City", homeScore:3, awayScore:1, minute:"90'+4'", homeLogo:"https://a.espncdn.com/hype-e2e/home.svg", awayLogo:"https://a.espncdn.com/hype-e2e/away.svg" };
   await heroPage.route("**://api.atakanozkan.com/live-matches**", route => route.fulfill({ contentType:"application/json", body:JSON.stringify({matches:[match],leagues:[{...LEAGUES[0],matches:[match]}]}) }));
   try {
-    await heroPage.goto(POPUP_URL);
+    await heroPage.goto(popupUrl);
     await heroPage.locator(".league-pick-card").first().click();
     await heroPage.locator(".match-card").first().click();
     const hero = heroPage.locator(".match-detail-hero");
@@ -656,7 +564,7 @@ test("last-successful scores have no freshness banner, fit every size, expire an
   });
   try {
     await page.evaluate(() => localStorage.clear());
-    await snapshotPage.goto(POPUP_URL, { waitUntil: "domcontentloaded" });
+    await snapshotPage.goto(popupUrl, { waitUntil: "domcontentloaded" });
     const notice = snapshotPage.locator("#snapshotNotice");
     await expect(notice).toHaveCount(0);
     await expect(snapshotPage.locator(".league-pick-card")).toHaveCount(3);
@@ -718,7 +626,7 @@ test("native Chromium i18n loads reference, Turkish, Slavic count forms and Arab
     try {
       await nativeContext.route("**://api.atakanozkan.com/**", route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ matches: ALL_MATCHES, leagues: LEAGUES }) }));
       const nativePage = await nativeContext.newPage();
-      await nativePage.goto(POPUP_URL, { waitUntil: "domcontentloaded" });
+      await nativePage.goto(popupUrl, { waitUntil: "domcontentloaded" });
       const actual = await nativePage.evaluate(key => ({ language: chrome.i18n.getUILanguage(), message: chrome.i18n.getMessage(key, ["2"]), count: matchCountMessage("live", 2) }), key);
       expect(actual.language.split(/[-_]/)[0], `${code}: real browser UI locale`).toBe(code);
       expect(actual.message, `${code}: native Chrome message lookup`).toBe(expected);
@@ -741,7 +649,7 @@ test("all 55 locale packs fit Small and preserve translated settings, standings 
   const screenshots = new Set(["en", "tr", "ar", "ru", "ml", "zh_TW"]);
   try {
     await localePage.setViewportSize({ width: 480, height: 540 });
-    await localePage.goto(POPUP_URL, { waitUntil: "domcontentloaded" });
+    await localePage.goto(popupUrl, { waitUntil: "domcontentloaded" });
     await localePage.locator(".league-pick-card").first().waitFor();
     for (const code of codes) {
       const messages = JSON.parse(fs.readFileSync(path.join(dir, code, "messages.json"), "utf8"));
@@ -806,7 +714,7 @@ test("provider text stays plain text and unsafe external URLs never become click
     body: JSON.stringify({ leagues, matches: leagues.flatMap(league => league.matches) }),
   }));
   try {
-    await safetyPage.goto(POPUP_URL, { waitUntil: "domcontentloaded" });
+    await safetyPage.goto(popupUrl, { waitUntil: "domcontentloaded" });
     await safetyPage.locator(".league-pick-card", { hasText: "Premier League" }).waitFor();
     await safetyPage.locator(".league-pick-card", { hasText: "Premier League" }).click();
     await expect(safetyPage.locator(".match-card").first()).toContainText(unsafeName);
