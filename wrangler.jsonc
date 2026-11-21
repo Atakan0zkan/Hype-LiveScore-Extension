@@ -3,6 +3,8 @@
   "name": "live-score-football",
   "main": "worker/index.js",
   "compatibility_date": "2026-04-26",
+  "workers_dev": false,
+  "preview_urls": false,
   "placement": {
     "mode": "smart"
   },
