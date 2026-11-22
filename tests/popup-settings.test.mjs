@@ -99,8 +99,15 @@ describe("popup settings and local backups", () => {
     assert.deepEqual(parsed, { favoriteLeagues: ["eng.1", "esp.1"], popupSize: "big" });
   });
 
+  it("keeps International Friendlies in portable favorites", () => {
+    const text = backup({ favoriteLeagues: ["fifa.friendly", "eng.1", "fifa.friendly"] });
+    assert.equal(app.eval(`applyImportedPreferences(parsePreferencesImport(${JSON.stringify(text)}))`), true);
+    const exported = JSON.parse(app.eval("JSON.stringify(buildPreferencesExport())"));
+    assert.deepEqual(exported.favoriteLeagues, ["eng.1", "fifa.friendly"]);
+  });
+
   it("rejects invalid versions, foreign fields, unsupported leagues and executable-looking data", () => {
-    for (const text of ["no json", "null", "[]", "{}", backup({ version: 2 }), backup({ version: "1" }), backup({ format: "other" }), backup({ popupSize: "huge" }), backup({ favoriteLeagues: "eng.1" }), backup({ favoriteLeagues: ["unsupported.league"] }), backup({ favoriteLeagues: ["<img src=x onerror=alert(1)>"] }), backup({ favorites: [] }), backup({ favoriteLeagues: Array(33).fill("eng.1") }), backup().replace('"format":', '"__proto__":{"polluted":true},"format":')]) {
+    for (const text of ["no json", "null", "[]", "{}", backup({ version: 2 }), backup({ version: "1" }), backup({ format: "other" }), backup({ popupSize: "huge" }), backup({ favoriteLeagues: "eng.1" }), backup({ favoriteLeagues: ["unsupported.league"] }), backup({ favoriteLeagues: ["fifa.friendly.w"] }), backup({ favoriteLeagues: ["<img src=x onerror=alert(1)>"] }), backup({ favorites: [] }), backup({ favoriteLeagues: Array(34).fill("eng.1") }), backup().replace('"format":', '"__proto__":{"polluted":true},"format":')]) {
       assert.throws(() => app.eval(`parsePreferencesImport(${JSON.stringify(text)})`));
     }
     assert.equal(app.eval("({}).polluted"), undefined);

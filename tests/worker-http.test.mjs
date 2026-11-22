@@ -50,7 +50,7 @@ describe("ESPN upstream host recovery", () => {
     assert.equal(response.headers.get("Access-Control-Allow-Origin"), EXT_ORIGIN);
     const payload = await response.json();
     assert.equal(payload.matches.length, 1);
-    assert.equal(payload.leagues.length, 32);
+    assert.equal(payload.leagues.length, 33);
     assert.equal(calls.length, 6);
     assert.equal((await run(request)).headers.get("X-Cache"), "HIT");
     assert.equal(calls.length, 6, "a healthy recovered result is cached normally");
@@ -231,7 +231,7 @@ async function liveContext(events, cache = memoryCache()) {
 }
 
 describe("worker HTTP: live-matches routing + cache", () => {
-  it("200 + 32 groups + CORS echo + MISS then HIT", async () => {
+  it("200 + 33 groups + CORS echo + MISS then HIT", async () => {
     const cache = memoryCache();
     const { ctx, run } = await liveContext([espnEvent({ state: "in" })], cache);
     const call = (path, headers) => run(`(async () => {
@@ -243,7 +243,7 @@ describe("worker HTTP: live-matches routing + cache", () => {
     const first = await call("/live-matches?client=extension&version=1.6", { Origin: UNPACKED_ORIGIN });
     assert.equal(first.status, 200);
     assert.ok(Array.isArray(first.json.matches) && Array.isArray(first.json.leagues));
-    assert.equal(first.json.leagues.length, 32);
+    assert.equal(first.json.leagues.length, 33);
     assert.equal(first.cors, UNPACKED_ORIGIN);
     assert.ok(first.json.matches.length >= 1, "live event survived");
     const second = await call("/live-matches?client=extension&version=1.6", { Origin: UNPACKED_ORIGIN });

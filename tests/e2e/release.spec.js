@@ -21,7 +21,7 @@ test("candidate Worker to candidate popup preserves real event identities and la
     await route.fulfill({status:response.status,headers:Object.fromEntries(response.headers),body:await response.text()});
   });
   await app.page.goto(app.url);
-  await expect(app.page.locator(".league-pick-card")).toHaveCount(32);
+  await expect(app.page.locator(".league-pick-card")).toHaveCount(33);
   await app.page.locator(".league-pick-card",{hasText:"Turkish Super Lig"}).click();
   await expect(app.page.locator(".standings-position--champions-league").first()).toHaveCount(1);
   await app.page.locator(".match-card",{hasText:"Galatasaray"}).click();
@@ -56,9 +56,9 @@ test("visible controls have usable names and 24px targets; hidden screens are no
   await expect(app.page.locator("#settingsVersion")).toHaveText(await app.page.evaluate(()=>chrome.runtime.getManifest().version));
 });
 
-test("930-match rendering stays within a performance budget and repeated refreshes do not accumulate DOM",async({app},info)=>{
+test("960-match rendering stays within a performance budget and repeated refreshes do not accumulate DOM",async({app},info)=>{
   const payload=await scorePayload(30);
-  const {calls}=await servePopup(app,{payload});await expect(app.page.locator(".league-pick-card")).toHaveCount(32);
+  const {calls}=await servePopup(app,{payload});await expect(app.page.locator(".league-pick-card")).toHaveCount(33);
   const metrics=await app.page.evaluate(payload=>{
     selectedLeagueKey=null;selectedMatchKey=null;
     const samples=[];const counts=[];
@@ -71,7 +71,7 @@ test("930-match rendering stays within a performance budget and repeated refresh
     return {matches:payload.matches.length,medianMs:samples[10],p95Ms:samples[18],domGrowth:Math.max(...counts)-Math.min(...counts),leagueRenderMs:performance.now()-leagueStart,leagueRows:document.querySelectorAll(".match-card").length};
   },payload);
   await info.attach("performance-budget",{body:JSON.stringify(metrics,null,2),contentType:"application/json"});
-  expect(metrics.matches).toBe(930);
+  expect(metrics.matches).toBe(960);
   expect(metrics.medianMs).toBeLessThan(300);
   expect(metrics.p95Ms).toBeLessThan(1000);
   expect(metrics.domGrowth).toBeLessThanOrEqual(20);

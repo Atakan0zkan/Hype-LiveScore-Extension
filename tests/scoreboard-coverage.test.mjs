@@ -30,6 +30,50 @@ describe("complete and identity-safe scoreboard ingestion", () => {
     assert.equal(calls.length,5,"fix the aggregate query, not 32 extra requests on every refresh");
   });
 
+  it("serves only men's senior friendlies from the aggregate and keeps the normal match window", async () => {
+    const inHours = hours => new Date(Date.now() + hours * 3600000).toISOString();
+    const fixtures = [
+      espnEvent({ id: "401930895", leagueId: "3922" }),
+      espnEvent({ id: "401916336", leagueId: "3922", state: "pre", kickoff: inHours(2) }),
+      espnEvent({ id: "401933879", leagueId: "3922", state: "post", kickoff: inHours(-3) }),
+      espnEvent({ id: "401930339", leagueId: "3922", state: "pre", kickoff: inHours(25) }),
+      espnEvent({ id: "401932236", leagueId: "3923" }),
+      espnEvent({ id: "401933100", leagueId: "19834" }),
+    ];
+    const calls = [];
+    const { run } = await loadWorkerContext({ caches: { default: memoryCache() }, fetch: async input => {
+      const url = new URL(input); calls.push(url.pathname);
+      if (url.pathname.endsWith("/summary")) return json({ header: fixtures[2] });
+      return scoreboardResponse(url.pathname.endsWith("/all/scoreboard") ? fixtures : []);
+    } });
+    const request = path => run(`handleRequest(new Request(${JSON.stringify(`https://api.atakanozkan.com${path}`)}, {headers:{Origin:"${ORIGIN}"}}), {})`);
+    const response = await request("/live-matches");
+    assert.equal(response.status, 200);
+    const { matches, leagues } = await response.json();
+    const friendlies = leagues.find(league => league.code === "fifa.friendly");
+    assert.equal(friendlies?.id, "3922");
+    assert.equal(friendlies.name, "International Friendlies");
+    assert.equal(friendlies.hasStandings, false);
+    assert.deepEqual(matches.map(({ id, state }) => [id, state]), [
+      ["401930895", "live"], ["401916336", "scheduled"], ["401933879", "finished"],
+    ]);
+    assert.deepEqual(friendlies.matches, matches);
+    assert.equal(calls.length, 5, "friendlies need no extra scoreboard request");
+
+    const standings = await request("/league-standings?leagueCode=fifa.friendly");
+    assert.equal(standings.status, 200);
+    assert.deepEqual(await standings.json(), { leagueCode: "fifa.friendly", standings: [] });
+    assert.equal(calls.length, 5, "older popups can request empty standings without ESPN traffic");
+
+    const detail = await request("/match-detail?leagueCode=fifa.friendly&eventId=401933879");
+    assert.equal(detail.status, 200);
+    const data = await detail.json();
+    assert.equal(data.id, "401933879");
+    assert.deepEqual(data.stats, []);
+    assert.deepEqual(data.timeline, []);
+    assert.match(calls.at(-1), /\/fifa\.friendly\/summary$/);
+  });
+
   it("rejects successful but malformed primary scoreboards instead of caching an empty league list", async () => {
     for (const value of [{}, {events:null}, {events:{}}, [], null]) {
       const {run} = await loadWorkerContext({fetch:async url => json(String(url).includes("/all/") ? value : {events:[]})});

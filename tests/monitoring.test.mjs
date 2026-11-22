@@ -5,14 +5,16 @@ import { runSmokeChecks, MONITOR_USER_AGENT } from "../tools/smoke-test.js";
 import { monitorProduction, createGithubClient, CONFIRM_DELAY_MS } from "../tools/production-monitor.mjs";
 import { waitForWorkerBuild } from "../tools/wait-for-worker-build.mjs";
 import { loadWorkerContext, memoryCache, scoreboardResponse } from "./helpers.mjs";
+import { ESPN_LEAGUES_BY_ID } from "../worker/football-metadata.js";
 
 const ORIGIN = "chrome-extension://cdnpjnmhmagmiefkleefgchgffeaacaa";
 const date = "2026-10-16T12:00:00.000Z";
 const json = value => new Response(JSON.stringify(value), { headers: { "Content-Type": "application/json" } });
 const healthy = () => ({ ok: true, checks: [{ name: "GET /live-matches", status: "ok" }] });
 const unhealthy = (name = "GET /live-matches", code = "HTTP_502") => ({ ok: false, checks: [{ name, status: "failed", code }] });
-const emptyLive = () => ({ matches: [], leagues: ["fifa.world", "uefa.nations", "uefa.euro", "conmebol.america",
-  ...Array.from({ length: 28 }, (_, i) => `league.${i}`)].map(code => ({ code, name: code, matches: [] })) });
+const emptyLive = () => ({ matches: [], leagues: Object.entries(ESPN_LEAGUES_BY_ID)
+  .map(([id, { code, name }]) => ({ id, code, name, matches: [] })) });
+const providerLeague = (live, code) => ({ slug: code, id: live.leagues.find(league => league.code === code)?.id });
 function fixtureFetch(url) {
   const path = new URL(url).pathname;
   if (path === "/live-matches") return json(emptyLive());
@@ -22,21 +24,20 @@ function fixtureFetch(url) {
 }
 
 describe("production smoke probes", () => {
-  it("can detect missing live fixtures even when the API returns healthy JSON and 32 league cards", async () => {
+  it("detects a missing live friendly even when the API returns a complete league catalog", async () => {
     const calls = [];
     const live = emptyLive();
-    live.leagues[4] = {code:"tur.1",id:"3946",name:"Turkish Super Lig",matches:[]};
     const report = await runSmokeChecks({ verifyCoverage:true, now:() => Date.parse("2026-11-07T16:15:00Z"), fetchImpl:async url => {
       const parsed = new URL(url); calls.push(parsed);
       if (parsed.hostname === "site.api.espn.com") {
         const code = parsed.pathname.split("/").at(-2);
-        return json({leagues:[{slug:code,...(code === "tur.1" ? {id:"3946"} : {})}],events:code === "tur.1" ? [{id:"401888371",date:"2026-11-07T16:00:00Z",status:{type:{state:"in",completed:false}}}] : []});
+        return json({leagues:[providerLeague(live,code)],events:code === "fifa.friendly" ? [{id:"401930895",date:"2026-11-07T16:00:00Z",status:{type:{state:"in",completed:false}}}] : []});
       }
       return parsed.pathname === "/live-matches" ? json(live) : fixtureFetch(url);
     }});
     assert.equal(report.ok,false);
-    assert.equal(report.checks.find(check => check.name === "Live fixture coverage tur.1")?.code,"MISSING_LIVE_FIXTURES");
-    assert.equal(calls.filter(url => url.hostname === "site.api.espn.com").length,31);
+    assert.equal(report.checks.find(check => check.name === "Live fixture coverage fifa.friendly")?.code,"MISSING_LIVE_FIXTURES");
+    assert.equal(calls.filter(url => url.hostname === "site.api.espn.com").length,32);
   });
 
   it("labels every request as monitoring, preserves endpoint queries and accepts genuine empty data", async () => {
@@ -70,9 +71,10 @@ describe("production smoke probes", () => {
   });
   it("checks the entire payload instead of accepting an invalid league or match after the first five rows", async () => {
     for (const alter of [
-      value => { value.leagues[31].matches = null; },
-      value => { value.leagues[31].code = value.leagues[0].code; },
+      value => { value.leagues.at(-1).matches = null; },
+      value => { value.leagues.at(-1).code = value.leagues[0].code; },
       value => { value.leagues.push({...value.leagues[0]}); },
+      value => { value.leagues.find(league => league.code === "fifa.friendly").code = "fifa.friendly.w"; },
       value => { value.matches = Array.from({length:6},() => ({id:"760486",league:"Premier League",homeTeam:"Home",awayTeam:"Away",homeScore:0,awayScore:0,minute:"1'",status:"Live"})); value.matches[5].homeScore = "bad"; },
     ]) {
       const value = emptyLive(); alter(value);
@@ -83,8 +85,7 @@ describe("production smoke probes", () => {
 
   it("compares league/event identities without treating a newly starting fixture as an outage", async () => {
     const live = emptyLive();
-    live.leagues[4] = {code:"tur.1",id:"3946",name:"Turkish Super Lig",matches:[]};
-    const provider = (code, overrides = {}) => ({leagues:[{slug:code,id:code === "tur.1" ? "3946" : "1"}],events:code === "tur.1" ? [{id:"401888371",date:"2026-11-07T16:14:30Z",status:{type:{state:"in",completed:false}}}] : [],...overrides});
+    const provider = (code, overrides = {}) => ({leagues:[providerLeague(live,code)],events:code === "tur.1" ? [{id:"401888371",date:"2026-11-07T16:14:30Z",status:{type:{state:"in",completed:false}}}] : [],...overrides});
     for (const [overrides, expected] of [[{},"ok"],[{leagues:[{slug:"wrong.1",id:"3946"}]} ,"failed"],[{events:null},"failed"]]) {
       const report = await runSmokeChecks({verifyCoverage:true,now:() => Date.parse("2026-11-07T16:15:00Z"),fetchImpl:async url => {
         const parsed = new URL(url);

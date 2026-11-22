@@ -58,6 +58,7 @@ const LOCAL_LEAGUE_LOGOS = {
   "eng.fa": "icons/leagues/eng-fa.png",
   "eng.w.1": "icons/leagues/eng-w-1.png",
   "esp.1": "icons/leagues/esp-1.png",
+  "fifa.friendly": "icons/leagues/international-friendlies.svg",
   "fifa.world": "icons/leagues/fifa-world.png",
   "fra.1": "icons/leagues/fra-1.png",
   "ger.1": "icons/leagues/ger-1.png",
@@ -133,7 +134,7 @@ const CLUB_POPULARITY_BY_ID = new Map(CLUB_POPULARITY_SNAPSHOT.flatMap(([ids, we
 const CLUB_POPULARITY_BY_NAME = new Map(CLUB_POPULARITY_SNAPSHOT.flatMap(([, weight, names]) => names.map(name => [normalizePopularityTeamName(name), weight])));
 // Club reach cannot be reused as a national-team or women's-team ranking.
 const CLUB_POPULARITY_LEAGUES = new Set(Object.keys(LOCAL_LEAGUE_LOGOS).filter(code =>
-  !["eng.w.1", "fifa.world", "uefa.nations", "uefa.euro", "conmebol.america"].includes(code)));
+  !["eng.w.1", "fifa.world", "fifa.friendly", "uefa.nations", "uefa.euro", "conmebol.america"].includes(code)));
 
 const FALLBACK_LOGO_SVG = [
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">',

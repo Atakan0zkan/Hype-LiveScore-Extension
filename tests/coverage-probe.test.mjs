@@ -1,27 +1,31 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { checkLiveFixtureCoverage } from "../tools/scoreboard-coverage.mjs";
+import { ESPN_LEAGUES_BY_ID } from "../worker/football-metadata.js";
 
 const NOW = Date.parse("2026-11-07T16:15:00Z");
-const live = () => ({matches:[],leagues:["fifa.world","tur.1",...Array.from({length:30},(_,i)=>`league.${i}`)].map(code=>({code,matches:[]}))});
+const leagueIds = new Map(Object.entries(ESPN_LEAGUES_BY_ID).map(([id, league]) => [league.code, id]));
+const live = () => ({matches:[],leagues:[...leagueIds].map(([code,id])=>({code,id,matches:[]}))});
 const leagueCode = url => new URL(url).pathname.split("/").at(-2);
 const json = data => new Response(JSON.stringify(data),{headers:{"Content-Type":"application/json"}});
-const provider = (code, events=[]) => ({leagues:[{id:code === "tur.1" ? "3946" : "1",slug:code}],events});
+const provider = (code, events=[]) => ({leagues:[{id:leagueIds.get(code),slug:code}],events});
 const target = report => report.find(row=>row.name === "Live fixture coverage tur.1");
 const event = overrides => ({id:"401888371",date:"2026-11-07T16:00:00Z",status:{type:{state:"in",completed:false}},...overrides});
 const check = (payload,fetchImpl,options={}) => checkLiveFixtureCoverage(payload,{fetchImpl,now:()=>NOW,...options});
 
 describe("bounded provider-coverage probe", () => {
-  it("checks all 31 current competitions, skips historical World Cups and matches exact league/event identities", async () => {
+  it("checks all 32 current competitions including friendlies, not the future World Cup", async () => {
     const data=live(); data.matches=[{leagueCode:"tur.1",id:"401888371"}];
     const calls=[];
     const report=await check(data,async(url,init)=>{
       calls.push({url,init});
       return json(provider(leagueCode(url),leagueCode(url)==="tur.1"?[event()]:[]));
     });
-    assert.equal(report.length,31);
+    assert.equal(report.length,32);
     assert.equal(report.every(row=>row.status==="ok"),true);
     assert.equal(calls.every(call=>!call.url.includes("fifa.world")),true);
+    assert.equal(calls.filter(call=>leagueCode(call.url)==="fifa.friendly").length,1);
+    assert.ok(!calls.some(call=>leagueCode(call.url)==="fifa.friendly.w"));
     assert.equal(calls.every(call=>call.init.redirect==="error" && !call.init.headers.Authorization && !call.init.headers.Origin),true);
     data.matches[0].leagueCode="esp.1";
     assert.equal(target(await check(data,async url=>json(provider(leagueCode(url),leagueCode(url)==="tur.1"?[event()]:[])))).code,"MISSING_LIVE_FIXTURES");
@@ -34,14 +38,16 @@ describe("bounded provider-coverage probe", () => {
   });
 
   it("requires bounded league codes and a complete, unique league list before any request", async () => {
-    for (const change of [p=>{p.leagues.pop();},p=>{p.leagues[1].code="tur.1?secret=value";},p=>{p.leagues[1].code="x".repeat(65)+".1";},p=>{p.leagues[1].code="fifa.world";},p=>{p.matches=null;}]) {
+    for (const change of [p=>{p.leagues.pop();},p=>{p.leagues[1].code="tur.1?secret=value";},p=>{p.leagues[1].code="x".repeat(65)+".1";},p=>{p.leagues[1].code="fifa.world";},p=>{p.leagues.find(l=>l.code==="fifa.friendly").code="fifa.friendly.w";},p=>{p.matches=null;}]) {
       const data=live(); change(data);
-      await assert.rejects(check(data,()=>{throw Error("must not fetch");}),/32 unique valid league codes/);
+      let requests=0;
+      await assert.rejects(check(data,()=>{requests++;throw Error("must not fetch");}),/curated league codes/);
+      assert.equal(requests,0);
     }
   });
 
   it("detects a changed numeric league identity even when no match is live", async () => {
-    const data=live(); data.leagues[1].id="2310";
+    const data=live(); data.leagues.find(league=>league.code==="tur.1").id="2310";
     assert.equal(target(await check(data,async url=>json(provider(leagueCode(url))))).code,"LEAGUE_ID_MISMATCH");
   });
 

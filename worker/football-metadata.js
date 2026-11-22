@@ -86,6 +86,7 @@ const ESPN_LEAGUES_BY_ID = {
   },
   "3914": { code: "eng.2", name: "English Championship", logoId: "24" },
   "3918": { code: "eng.fa", name: "English FA Cup", logoId: "40" },
+  "3922": { code: "fifa.friendly", name: "International Friendlies", hasStandings: false },
   "3927": {
     code: "ger.2",
     name: "German 2. Bundesliga",

@@ -26,7 +26,7 @@ describe("verified USL identity", () => {
     assert.equal(rows[0].league, "USL Championship");
     assert.equal(rows[0].leagueLogoId, "2292");
     const groups = run("groupMatchesByLeague([])");
-    assert.equal(groups.length, 32);
+    assert.equal(groups.length, 33);
     assert.equal(groups.find((group) => group.code === "usa.usl.1").id, "4002");
   });
 });

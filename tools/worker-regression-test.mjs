@@ -7,6 +7,7 @@ const ALLOWED_ORIGIN_B = "chrome-extension://bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const KNOWN_EVENT_ID = "760486";
 const REQUIRED_LEAGUE_CODES = [
   "fifa.world",
+  "fifa.friendly",
   "uefa.nations",
   "uefa.euro",
   "conmebol.america",
@@ -79,7 +80,7 @@ assert.equal(liveResponseA.headers.get("access-control-allow-origin"), ALLOWED_O
 assert.equal(liveResponseB.headers.get("access-control-allow-origin"), ALLOWED_ORIGIN_B);
 
 const livePayload = await liveResponseA.json();
-assert.equal(livePayload.leagues.length, 32);
+assert.equal(livePayload.leagues.length, 33);
 const leagueCodes = new Set(livePayload.leagues.map((league) => league.code));
 for (const code of REQUIRED_LEAGUE_CODES) {
   assert.ok(leagueCodes.has(code), `missing required league ${code}`);
@@ -143,7 +144,7 @@ assert.equal(liveAnalyticsPoint.doubles[0], 1);
 assert.equal(liveAnalyticsPoint.blobs.length, 13);
 
 console.log("PASS worker regression tests");
-console.log("- 32 curated leagues include UEFA Nations League, UEFA EURO, and Copa America");
+console.log("- 33 curated competitions include International Friendlies, UEFA Nations League, UEFA EURO, and Copa America");
 console.log("- direct scoreboard probes are present and start within one live refresh");
 console.log("- coalesced live/detail responses retain each request's CORS origin");
 console.log("- known match detail is cached/coalesced; unknown and overlong ids fail closed");

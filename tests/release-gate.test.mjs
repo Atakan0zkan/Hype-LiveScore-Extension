@@ -104,6 +104,18 @@ describe("release quality gate", () => {
     }
   });
 
+  it("requires the exact provider coverage catalog, including International Friendlies", async () => {
+    const { analyzeTestEvidence } = await import("../tools/release-gate.mjs");
+    const { LIVE_COVERAGE_LEAGUE_CODES } = await import("../tools/scoreboard-coverage.mjs");
+    const analyze = codes => analyzeTestEvidence("live-api", {
+      stdout: codes.map(code => `PASS Live fixture coverage ${code} - 0 established live fixture(s) present`).join("\n"),
+    });
+    assert.deepEqual(analyze(LIVE_COVERAGE_LEAGUE_CODES), { ok: true, providerLeagues: 32 });
+    const withoutFriendlies = LIVE_COVERAGE_LEAGUE_CODES.filter(code => code !== "fifa.friendly");
+    assert.equal(analyze(withoutFriendlies).ok, false);
+    assert.equal(analyze([...withoutFriendlies, "fifa.friendly.w"]).ok, false);
+  });
+
   it("isolates browser cleanup from release reports and does not launch a candidate rejected by safety gates", async () => {
     const config=fs.readFileSync(path.join(root,"playwright.config.mjs"),"utf8");
     assert.match(config,/outputDir:\s*["']test-results\/browser["']/);

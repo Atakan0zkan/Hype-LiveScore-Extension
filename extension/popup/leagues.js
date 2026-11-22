@@ -195,9 +195,9 @@ function renderLeagueDetail(league) {
   if (otherMatches.length > 0) appendMatchSection(card, msg("other"), otherMatches, league);
   const bracketSection = createTournamentBracketSection(league);
   if (bracketSection) card.appendChild(bracketSection);
-  card.appendChild(createStandingsSection(league));
+  if (league.hasStandings !== false) card.appendChild(createStandingsSection(league));
 
-  leagueDetailContent.appendChild(card);
+  if (card.childElementCount) leagueDetailContent.appendChild(card);
   backBtn.textContent = formatBackLabel();
   showOnly("detail");
   restoreViewState(`league:${getLeagueKey(league)}`, leagueStandingsCache.get(league.code)?.status === "loading");

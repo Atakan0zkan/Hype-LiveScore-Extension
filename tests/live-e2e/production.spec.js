@@ -1,4 +1,5 @@
 import { test, expect } from "../browser/unpacked-extension.mjs";
+import { ESPN_LEAGUES_BY_CODE } from "../../worker/football-metadata.js";
 
 const API="https://api.atakanozkan.com";
 const headers={Accept:"application/json",Origin:"chrome-extension://cdnpjnmhmagmiefkleefgchgffeaacaa","User-Agent":"HypeScore-HealthMonitor/1.0"};
@@ -12,7 +13,8 @@ test("candidate popup reads real leagues, standings, details, settings and only 
   await app.page.goto(app.url,{waitUntil:"domcontentloaded"});
   const response=await initial;expect(response.status()).toBe(200);
   const payload=await response.json();expect(payload.freshness?.stale).not.toBe(true);
-  await expect(app.page.locator(".league-pick-card")).toHaveCount(32);
+  expect(payload.leagues.map(league=>league.code).sort()).toEqual([...ESPN_LEAGUES_BY_CODE.keys()].sort());
+  await expect(app.page.locator(".league-pick-card")).toHaveCount(ESPN_LEAGUES_BY_CODE.size);
   await expect(app.page.locator("#errorState")).toBeHidden();
   await app.page.locator("#settingsToggle").click();
   await expect(app.page.locator("#settingsVersion")).toHaveText(await app.page.evaluate(()=>chrome.runtime.getManifest().version));

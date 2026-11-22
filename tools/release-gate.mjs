@@ -6,6 +6,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { stripVTControlCharacters } from "node:util";
 import { isPrivateProjectPath } from "./security-check.mjs";
+import { LIVE_COVERAGE_LEAGUE_CODES } from "./scoreboard-coverage.mjs";
 
 const ROOT = path.resolve(import.meta.dirname,"..");
 const REQUIRED = ["package","regressions","i18n","security-history","dependency-audit","worker-bundle","bundle-budget","coverage","browser","live-api","live-browser"];
@@ -71,7 +72,7 @@ export function analyzeTestEvidence(id,{stdout="",browserReport}={}){
   }
   if(id==="live-api"){
     const leagues=new Set([...stdout.matchAll(/PASS Live fixture coverage ([a-z0-9.]+)/g)].map(match=>match[1]));
-    return {ok:leagues.size===31,providerLeagues:leagues.size};
+    return {ok:leagues.size===LIVE_COVERAGE_LEAGUE_CODES.length&&LIVE_COVERAGE_LEAGUE_CODES.every(code=>leagues.has(code)),providerLeagues:leagues.size};
   }
   return {ok:true};
 }

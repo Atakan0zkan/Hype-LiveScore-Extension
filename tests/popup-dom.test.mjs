@@ -119,7 +119,7 @@ describe("popup DOM: league match previews", () => {
   });
 
   it("does not apply men's club social reach to national or women's competitions", () => {
-    for (const leagueCode of ["eng.w.1", "fifa.world", "uefa.euro", "uefa.nations", "conmebol.america", "unsupported"]) {
+    for (const leagueCode of ["eng.w.1", "fifa.world", "fifa.friendly", "uefa.euro", "uefa.nations", "conmebol.america", "unsupported"]) {
       const match = domMatch({ leagueCode, homeTeamId: "360", homeTeam: "Manchester United", awayTeam: "Liverpool" });
       assert.equal(app.eval(`getMatchPopularityScore(${JSON.stringify(match)})`), 0);
     }

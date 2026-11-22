@@ -189,11 +189,16 @@ async function handleLeagueStandingsRequest(request, url) {
 
   const leagueCode = url.searchParams.get("leagueCode") || "";
 
-  if (!isSupportedLeagueCode(leagueCode)) {
+  const league = ESPN_LEAGUES_BY_CODE.get(leagueCode);
+  if (!league) {
     return jsonResponse(
       { error: "Invalid league standings request" },
       { status: 400, cache: "BYPASS", source: "none", request },
     );
+  }
+
+  if (league.hasStandings === false) {
+    return jsonResponse({ leagueCode, standings: [] }, { request, cache: "BYPASS", source: "none" });
   }
 
   const cache = caches.default;

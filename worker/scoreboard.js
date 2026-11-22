@@ -282,6 +282,7 @@ function groupMatchesByLeague(matches) {
           league.logoUrl ||
           buildLeagueLogoUrl(league.logoId, league.logoStyle || "default"),
         logoTone: league.logoTone || "dark",
+        ...(league.hasStandings === false ? { hasStandings: false } : {}),
         matches: [],
       },
     ]),

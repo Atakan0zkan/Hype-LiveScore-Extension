@@ -3,17 +3,12 @@
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { checkLiveFixtureCoverage } from "./scoreboard-coverage.mjs";
+import { ESPN_LEAGUES_BY_CODE } from "../worker/football-metadata.js";
 
 export const DEFAULT_WORKER_URL = "https://api.atakanozkan.com";
 export const MONITOR_USER_AGENT = "HypeScore-HealthMonitor/1.0";
 const EXTENSION_ORIGIN = "chrome-extension://cdnpjnmhmagmiefkleefgchgffeaacaa";
 const REQUEST_TIMEOUT_MS = 10000;
-const REQUIRED_LEAGUE_CODES = [
-  "fifa.world",
-  "uefa.nations",
-  "uefa.euro",
-  "conmebol.america",
-];
 
 const headers = {
   Accept: "application/json",
@@ -129,13 +124,14 @@ function assertLivePayload(payload) {
   assertArray(payload.matches, "live payload matches");
   assertArray(payload.leagues, "live payload leagues");
 
-  if (payload.leagues.length !== 32) {
-    throw new Error(`Expected 32 curated leagues, got only ${payload.leagues.length} leagues`);
+  const expectedCount = ESPN_LEAGUES_BY_CODE.size;
+  if (payload.leagues.length !== expectedCount) {
+    throw new Error(`Expected ${expectedCount} curated leagues, got ${payload.leagues.length}`);
   }
 
   const leagueCodes = new Set(payload.leagues.map((league) => league?.code));
-  if (leagueCodes.size !== 32) throw new Error("Expected 32 unique league codes");
-  for (const code of REQUIRED_LEAGUE_CODES) {
+  if (leagueCodes.size !== expectedCount) throw new Error(`Expected ${expectedCount} unique league codes`);
+  for (const code of ESPN_LEAGUES_BY_CODE.keys()) {
     if (!leagueCodes.has(code)) {
       throw new Error(`Missing required league code: ${code}`);
     }

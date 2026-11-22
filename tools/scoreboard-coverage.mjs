@@ -1,9 +1,14 @@
 // Deeper, opt-in release/daily probe. Never runs in the extension or Worker.
+import { ESPN_LEAGUES_BY_CODE, FIFA_WORLD_CUP_LEAGUE_CODE } from "../worker/football-metadata.js";
+
 const PROVIDER_BASES = ["https://site.api.espn.com", "https://site.web.api.espn.com"];
 const MAX_BYTES = 8 * 1024 * 1024;
 const EVENT_LIMIT = 1000;
 const START_GRACE_MS = 2 * 60 * 1000;
 const fail = (code, message, status) => Object.assign(new Error(message), {code, status});
+export const LIVE_COVERAGE_LEAGUE_CODES = Object.freeze(
+  [...ESPN_LEAGUES_BY_CODE.keys()].filter(code => code !== FIFA_WORLD_CUP_LEAGUE_CODE),
+);
 
 async function fetchScoreboard(code, {fetchImpl, timeoutMs}) {
   const controller = new AbortController();
@@ -51,10 +56,13 @@ async function fetchScoreboard(code, {fetchImpl, timeoutMs}) {
 }
 
 export async function checkLiveFixtureCoverage(payload, {fetchImpl = globalThis.fetch, timeoutMs = 10000, now = Date.now} = {}) {
-  if (!Array.isArray(payload?.leagues) || payload.leagues.length !== 32 ||
-      !Array.isArray(payload.matches) || payload.leagues.some(league => !/^[a-z][a-z0-9]*(?:\.[a-z0-9]+){1,3}$/.test(league?.code || "") || league.code.length > 64) ||
-      new Set(payload.leagues.map(league => league.code)).size !== 32) throw new Error("Coverage requires 32 unique valid league codes");
-  const leagues = payload.leagues.filter(league => league.code !== "fifa.world");
+  const expectedCount = ESPN_LEAGUES_BY_CODE.size;
+  if (!Array.isArray(payload?.leagues) || payload.leagues.length !== expectedCount ||
+      !Array.isArray(payload.matches) || payload.leagues.some(league => !ESPN_LEAGUES_BY_CODE.has(league?.code)) ||
+      new Set(payload.leagues.map(league => league.code)).size !== expectedCount) {
+    throw new Error(`Coverage requires all ${expectedCount} curated league codes exactly once`);
+  }
+  const leagues = payload.leagues.filter(league => league.code !== FIFA_WORLD_CUP_LEAGUE_CODE);
   const issued = new Set(payload.matches.map(match => `${match.leagueCode}:${match.id}`));
   const observedAt = now();
   const results = new Array(leagues.length);
