@@ -23,6 +23,7 @@ import {
   groupMatchesByLeague,
   isWorldCup2030Event,
 } from "./scoreboard.js";
+import { filterScoreboardResults } from "./result-window.js";
 import {
   ESPN_LEAGUES_BY_CODE,
   isSupportedLeagueCode,
@@ -103,9 +104,12 @@ async function readLiveSnapshot(cache, key) {
 }
 
 function liveSnapshotResponse(snapshot, request, stale) {
-  const ageSeconds = Math.max(0, Math.floor((Date.now() - snapshot.updatedAt) / 1000));
+  const now = Date.now();
+  const ageSeconds = Math.max(0, Math.floor((now - snapshot.updatedAt) / 1000));
   return jsonResponse({
     ...snapshot.payload,
+    matches: filterScoreboardResults(snapshot.payload.matches, now),
+    leagues: snapshot.payload.leagues.map((league) => ({ ...league, matches: filterScoreboardResults(league.matches, now) })),
     freshness: { updatedAt: new Date(snapshot.updatedAt).toISOString(), stale },
   }, {
     request,
@@ -373,7 +377,7 @@ async function getFreshTournamentBracketResponse(
 }
 
 async function refreshLiveMatches(env, cache, cacheKey) {
-  const { matches, source } = await getLiveMatches(env);
+  const { matches, source } = await getLiveMatches(env, cache);
   const cacheTtl = getLiveCacheTtl(matches);
   const data = {
     matches,

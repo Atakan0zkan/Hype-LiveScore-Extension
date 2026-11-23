@@ -1,7 +1,7 @@
 import { test, expect, chromium } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
-import { launchUnpackedExtension } from "../browser/unpacked-extension.mjs";
+import { browserLaunchOptions, launchUnpackedExtension } from "../browser/unpacked-extension.mjs";
 import { ALL_MATCHES, DETAIL, LEAGUES, STANDINGS } from "../browser/league-scenario.mjs";
 
 test.describe.configure({ mode: "serial" });
@@ -616,12 +616,10 @@ test("native Chromium i18n loads reference, Turkish, Slavic count forms and Arab
     ["ar", "liveMatchesCount", "مباريات مباشرة: 2"],
   ]) {
     const options = {
-      headless: false,
+      ...browserLaunchOptions(),
       locale: code,
       args: [`--lang=${code}`, `--disable-extensions-except=${extDir}`, `--load-extension=${extDir}`],
     };
-    if (process.env.E2E_BROWSER_PATH) options.executablePath = process.env.E2E_BROWSER_PATH;
-    else options.channel = "chromium";
     const nativeContext = await chromium.launchPersistentContext(path.join(path.dirname(extDir), `native-${code}`), options);
     try {
       await nativeContext.route("**://api.atakanozkan.com/**", route => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ matches: ALL_MATCHES, leagues: LEAGUES }) }));

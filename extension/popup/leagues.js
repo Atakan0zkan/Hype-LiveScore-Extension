@@ -69,11 +69,11 @@ function renderLeaguePickList(leagues) {
 function getLeaguePreviewMatch(league) {
   let liveMatch = null;
   let finishedMatch = null;
-  const matches = Array.isArray(league?.matches) ? league.matches : [];
+  const matches = selectLeagueResults(Array.isArray(league?.matches) ? league.matches : []);
 
   for (const match of matches) {
     if (!match || typeof match.homeTeam !== "string" || !match.homeTeam.trim() ||
-        typeof match.awayTeam !== "string" || !match.awayTeam.trim() || !isVisibleMatch(match)) continue;
+        typeof match.awayTeam !== "string" || !match.awayTeam.trim()) continue;
 
     // A finished match must never displace an available live match.
     if (match.state === "live") {
@@ -118,7 +118,8 @@ function createLeagueMatchPreview(match) {
   const statusLabel = kind === "finished" ? msg("fullTimeLabel") : halfTime ? msg("halfTimeLabel") : msg("live");
   const minute = kind === "live" && typeof match.minute === "string" &&
     /^\d{1,3}['′]?(?:\s*\+\s*\d{1,2}['′]?)?$/.test(match.minute.trim()) ? match.minute.trim() : "";
-  const statusText = minute ? `${minute} · ${statusLabel}` : statusLabel;
+  const resultDate = getFallbackResultDate(match);
+  const statusText = minute ? `${minute} · ${statusLabel}` : [statusLabel, resultDate].filter(Boolean).join(" · ");
   const homeScore = formatLeaguePreviewScore(match.homeScore);
   const awayScore = formatLeaguePreviewScore(match.awayScore);
   const summary = `${match.homeTeam} ${homeScore} – ${awayScore} ${match.awayTeam}`;
@@ -237,13 +238,14 @@ function appendMatchSection(card, title, matches, league) {
 }
 
 function createMatchCard(match, league) {
+  const resultDate = getFallbackResultDate(match);
   const card = document.createElement("article");
   card.className = "match-card match-card--clickable";
   card.tabIndex = 0;
   card.setAttribute("role", "button");
   card.setAttribute(
     "aria-label",
-    formatMatchAriaLabel(match.homeTeam, match.awayTeam),
+    [formatMatchAriaLabel(match.homeTeam, match.awayTeam), resultDate].filter(Boolean).join(" · "),
   );
   card.addEventListener("click", () => openMatchDetail(league, match));
   card.addEventListener("keydown", (event) => {
@@ -255,7 +257,7 @@ function createMatchCard(match, league) {
 
   const statusText = match.state === "scheduled" ? "" : translateStatus(match.status);
   card.append(
-    createTextElement("span", "time-badge", getMatchTimeLabel(match)),
+    createTextElement("span", resultDate ? "time-badge time-badge--result-date" : "time-badge", resultDate || getMatchTimeLabel(match)),
     createTeamsBlock(match),
     createTextElement(
       "span",
@@ -323,11 +325,41 @@ function normalizeLeagueGroups(payload) {
     .map((league) => ({
       ...league,
       name: league.code === FIFA_WORLD_CUP_LEAGUE_CODE ? "FIFA World Cup 2030" : league.name,
-      matches: sortMatchesForDisplay((league.matches || []).filter((match) =>
-        isVisibleMatch(match) && (league.code !== FIFA_WORLD_CUP_LEAGUE_CODE || isWorldCup2030Match(match)))),
+      matches: sortMatchesForDisplay(selectLeagueResults(league.code === FIFA_WORLD_CUP_LEAGUE_CODE
+        ? league.matches.filter(isWorldCup2030Match) : league.matches)),
     }))
     .filter((league) => league.matches.length > 0 || league.code || league.id)
     .sort(compareLeagues);
+}
+
+function selectLeagueResults(matches, now = Date.now()) {
+  const selected = [];
+  let hasRecentResult = false;
+  let fallback = null;
+  let fallbackKickoff = -Infinity;
+  for (const match of matches) {
+    if (!isVisibleMatch(match, now)) continue;
+    if (match.state !== "finished") {
+      selected.push(match);
+      continue;
+    }
+    const kickoff = Date.parse(match.kickoff || "");
+    if (kickoff >= now - RECENT_RESULT_WINDOW_MS) {
+      hasRecentResult = true;
+      selected.push(match);
+    } else if (kickoff > fallbackKickoff || (kickoff === fallbackKickoff && String(match.id) < String(fallback?.id))) {
+      fallback = match;
+      fallbackKickoff = kickoff;
+    }
+  }
+  if (!hasRecentResult && fallback) selected.push(fallback);
+  return selected;
+}
+
+function getFallbackResultDate(match) {
+  if (match.state !== "finished") return "";
+  const age = Date.now() - Date.parse(match.kickoff || "");
+  return age > RECENT_RESULT_WINDOW_MS && age <= LAST_RESULT_WINDOW_MS ? formatShortDate(match.kickoff) : "";
 }
 
 function buildLeagueGroupsFromMatches(matches) {
@@ -418,9 +450,13 @@ function isWorldCup2030Match(match) {
   return Number.isFinite(kickoff.getTime()) && kickoff.getUTCFullYear() === FIFA_WORLD_CUP_YEAR;
 }
 
-function isVisibleMatch(match) {
+function isVisibleMatch(match, now = Date.now()) {
   if (!match) return false;
   if (match.leagueCode === FIFA_WORLD_CUP_LEAGUE_CODE && !isWorldCup2030Match(match)) return false;
+  if (match.state === "finished") {
+    const kickoff = Date.parse(match.kickoff || "");
+    return kickoff >= now - LAST_RESULT_WINDOW_MS && kickoff <= now;
+  }
   if (match.state !== "scheduled") return true;
   return isUpcomingWithinWindow(match);
 }

@@ -395,6 +395,13 @@
   white-space: nowrap;
 }
 
+.time-badge--result-date {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
 .match-teams {
   display: grid;
   min-width: 0;

@@ -11,17 +11,16 @@ export function extensionIdFromKey(key){
     .map(byte=>String.fromCharCode(97+(byte>>4),97+(byte&15))).join("");
 }
 
-export function browserLaunchOptions(){
-  if(process.env.E2E_BROWSER_PATH)return {executablePath:process.env.E2E_BROWSER_PATH};
-  if(process.platform==="win32"){
-    const candidates=["C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe","C:/Program Files/Microsoft/Edge/Application/msedge.exe","C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe"];
-    const executablePath=candidates.find(file=>fs.existsSync(file));
-    if(executablePath)return {executablePath};
-  }
-  return {channel:"chromium"};
+export function browserLaunchOptions(env=process.env){
+  // The Playwright inspector overrides a requested headless launch.
+  if(env.PWDEBUG && !["0","false"].includes(env.PWDEBUG))throw new Error("Run extension tests without PWDEBUG or --debug to keep the browser in the background.");
+  return env.E2E_BROWSER_PATH
+    ? {executablePath:env.E2E_BROWSER_PATH,headless:true}
+    : {channel:"chromium",headless:true};
 }
 
 export async function launchUnpackedExtension(){
+  const launchOptions=browserLaunchOptions();
   const root=fs.mkdtempSync(path.join(os.tmpdir(),"hype-browser-test-"));
   if(root.includes(" ") || path.dirname(path.resolve(root))!==path.resolve(os.tmpdir()))throw new Error("Use a temporary directory without spaces for extension testing");
   const extDir=path.join(root,"extension"),profileDir=path.join(root,"profile");
@@ -35,7 +34,7 @@ export async function launchUnpackedExtension(){
     fs.cpSync(path.resolve("extension"),extDir,{recursive:true});
     const file=path.join(extDir,"manifest.json"),manifest=JSON.parse(fs.readFileSync(file,"utf8"));
     manifest.key=TEST_KEY_B64;fs.writeFileSync(file,JSON.stringify(manifest));
-    context=await chromium.launchPersistentContext(profileDir,{headless:false,...browserLaunchOptions(),args:[`--disable-extensions-except=${extDir}`,`--load-extension=${extDir}`]});
+    context=await chromium.launchPersistentContext(profileDir,{...launchOptions,args:[`--disable-extensions-except=${extDir}`,`--load-extension=${extDir}`]});
     return {context,extDir,profileDir,url:`chrome-extension://${extensionIdFromKey(TEST_KEY_B64)}/popup.html`,close};
   }catch(error){await close();throw error;}
 }

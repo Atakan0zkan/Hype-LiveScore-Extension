@@ -133,7 +133,8 @@ function renderPayload(payload) {
     if (selectedMatchKey) {
       const snapshotMatchesSelection =
         selectedMatchSnapshot &&
-        getMatchKey(selectedMatchSnapshot) === selectedMatchKey;
+        getMatchKey(selectedMatchSnapshot) === selectedMatchKey &&
+        (selectedMatchSnapshot.state !== "finished" || isVisibleMatch(selectedMatchSnapshot));
       const match =
         league.matches.find((item) => getMatchKey(item) === selectedMatchKey) ||
         (snapshotMatchesSelection ? selectedMatchSnapshot : null);

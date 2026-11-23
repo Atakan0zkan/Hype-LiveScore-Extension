@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { loadWorkerContext, memoryCache, espnEvent, scoreboardResponse } from "./helpers.mjs";
 
 const EXT_ORIGIN = "chrome-extension://cdnpjnmhmagmiefkleefgchgffeaacaa";
+const isFriendlyHistoryUrl = url => new URL(url).pathname.endsWith("/fifa.friendly/scoreboard");
 
 describe("ESPN upstream host recovery", () => {
   const primaryUrl = "https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard?limit=1000";
@@ -42,6 +43,7 @@ describe("ESPN upstream host recovery", () => {
     const { run } = await loadWorkerContext({ caches: { default: memoryCache() }, fetch: async (url) => {
       calls.push(String(url));
       if (String(url) === primaryUrl) return new Response("Forbidden", { status: 403 });
+      if (isFriendlyHistoryUrl(url)) return Response.json({ leagues: [{ id: "3922", slug: "fifa.friendly" }], events: [] });
       return scoreboardResponse(String(url) === alternateUrl ? [espnEvent()] : []);
     } });
     const request = `handleRequest(new Request("https://api.atakanozkan.com/live-matches", {headers:{Origin:"${EXT_ORIGIN}"}}), {})`;
@@ -51,9 +53,10 @@ describe("ESPN upstream host recovery", () => {
     const payload = await response.json();
     assert.equal(payload.matches.length, 1);
     assert.equal(payload.leagues.length, 33);
-    assert.equal(calls.length, 6);
+    assert.equal(calls.filter(url => !isFriendlyHistoryUrl(url)).length, 6);
+    const requestCount = calls.length;
     assert.equal((await run(request)).headers.get("X-Cache"), "HIT");
-    assert.equal(calls.length, 6, "a healthy recovered result is cached normally");
+    assert.equal(calls.length, requestCount, "a healthy recovered result is cached normally");
   });
 
   it("also recovers legacy standings/detail hosts while preserving the path and season", async () => {
@@ -166,15 +169,16 @@ describe("ESPN upstream host recovery", () => {
   });
 
   it("returns a real 502 when both hosts fail instead of an invented empty scoreboard", async () => {
-    let calls = 0;
-    const { run } = await loadWorkerContext({ fetch: async () => {
-      calls += 1;
+    const calls = [];
+    const { run } = await loadWorkerContext({ fetch: async (url) => {
+      calls.push(url);
       return new Response("Forbidden", { status: 403 });
     } });
     const result = await run(`handleRequest(new Request("https://api.atakanozkan.com/live-matches", {headers:{Origin:"${EXT_ORIGIN}"}}), {})`);
     assert.equal(result.status, 502);
     assert.equal((await result.json()).error, "Live match data could not be fetched");
-    assert.equal(calls, 10, "five scoreboard requests each have at most one alternate host");
+    assert.equal(calls.filter(url => !isFriendlyHistoryUrl(url)).length, 10, "five core scoreboards each have at most one alternate host");
+    assert.ok(calls.filter(isFriendlyHistoryUrl).length <= 4, "at most two archive months with one alternate host each");
   });
 });
 

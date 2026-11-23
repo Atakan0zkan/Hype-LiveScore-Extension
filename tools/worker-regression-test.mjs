@@ -52,6 +52,10 @@ globalThis.fetch = async (input) => {
     return jsonResponse(createEmptyLeaguePayload("780", "conmebol.america", "Copa America"));
   }
 
+  if (pathname.endsWith("/fifa.friendly/scoreboard")) {
+    return jsonResponse(createEmptyLeaguePayload("3922", "fifa.friendly", "International Friendly"));
+  }
+
   if (url.includes("/scoreboard")) {
     return jsonResponse({ leagues: [], events: [] });
   }

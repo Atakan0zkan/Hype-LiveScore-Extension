@@ -1,12 +1,8 @@
 import { defineConfig } from "@playwright/test";
-import { browserLaunchOptions } from "./tests/browser/unpacked-extension.mjs";
-
-const launch = browserLaunchOptions();
-if (launch.executablePath && !process.env.E2E_BROWSER_PATH) process.env.E2E_BROWSER_PATH = launch.executablePath;
 
 // Real-browser E2E for the unpacked extension. API is mocked at the network
 // layer (context.route), so runs are deterministic and offline-safe.
-// Headed mode is required for --load-extension; CI runs under xvfb-run.
+// The shared fixture uses the full Chromium channel in headless mode.
 export default defineConfig({
   testDir: "tests/e2e",
   outputDir: "test-results/browser",

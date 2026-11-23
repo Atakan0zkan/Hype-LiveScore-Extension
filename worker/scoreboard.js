@@ -1,4 +1,4 @@
-import { getErrorMessage } from "./http.js";
+import { getErrorMessage, safeReadJsonResponse } from "./http.js";
 import {
   fetchJson,
   THESPORTSDB_LIVE_SCORE_URL,
@@ -22,8 +22,15 @@ import {
   buildLeagueLogoUrl,
 } from "./football-metadata.js";
 import { getEventKey, isSafeEventId } from "./match-cache.js";
+import { LAST_RESULT_WINDOW_MS, filterScoreboardResults, getScoreboardLeagueKey, isWithinLastResultWindow } from "./result-window.js";
 
 const UPCOMING_MATCH_WINDOW_MS = 24 * 60 * 60 * 1000;
+const INTERNATIONAL_FRIENDLIES_ID = "3922";
+const INTERNATIONAL_FRIENDLIES_CODE = ESPN_LEAGUES_BY_ID[INTERNATIONAL_FRIENDLIES_ID].code;
+const FRIENDLY_HISTORY_REFRESH_MS = 30 * 60 * 1000;
+const FRIENDLY_HISTORY_RETRY_MS = 5 * 60 * 1000;
+const FRIENDLY_HISTORY_MAX_AGE_SECONDS = 6 * 60 * 60;
+const FRIENDLY_HISTORY_TIMEOUT_MS = 2500;
 
 const EXTRA_ESPN_SCOREBOARD_LEAGUES = [
   "uefa.europa.conf",
@@ -32,11 +39,26 @@ const EXTRA_ESPN_SCOREBOARD_LEAGUES = [
   "conmebol.america",
 ];
 
-async function getLiveMatches(env) {
+async function getLiveMatches(env, cache = caches.default) {
   try {
-    const espnPayloads = await fetchEspnScoreboardPayloads();
+    const [espnPayloads, history] = await Promise.all([
+      fetchEspnScoreboardPayloads(),
+      loadFriendlyHistory(cache, Date.now()).catch((error) => {
+        console.warn(`Friendly history unavailable: ${getErrorMessage(error)}`);
+        return [];
+      }),
+    ]);
+    const matches = normalizeEspnMatchPayloads(espnPayloads);
+    const keys = new Set(matches.map((match) => getEventKey(match.id, match.leagueCode)));
+    for (const match of history) {
+      const key = getEventKey(match.id, match.leagueCode);
+      if (!keys.has(key)) {
+        keys.add(key);
+        matches.push(match);
+      }
+    }
     return {
-      matches: normalizeEspnMatchPayloads(espnPayloads),
+      matches: filterScoreboardResults(matches),
       source: "espn",
     };
   } catch (espnError) {
@@ -55,9 +77,75 @@ async function getLiveMatches(env) {
     });
 
     return {
-      matches: normalizeSportsDbMatches(sportsDbPayload),
+      matches: filterScoreboardResults(normalizeSportsDbMatches(sportsDbPayload)),
       source: "thesportsdb",
     };
+  }
+}
+
+async function loadFriendlyHistory(cache, now) {
+  const month = (time) => new Date(time).toISOString().slice(0, 7).replace("-", "");
+  // ESPN buckets results by its provider date, which can be the previous UTC
+  // day at midnight. Include that neighboring month but enforce exact ages below.
+  const months = new Set([month(now - LAST_RESULT_WINDOW_MS - 86400000), month(now)]);
+  const results = await Promise.all([...months].map((period) => loadFriendlyHistoryMonth(cache, period, now)));
+  return results.flat().filter((match) => isWithinLastResultWindow(Date.parse(match.kickoff || ""), now));
+}
+
+async function loadFriendlyHistoryMonth(cache, period, now) {
+  const key = new Request(`https://live-score-extension.internal/friendly-results/v2/${period}`);
+  let cached;
+  try {
+    cached = await safeReadJsonResponse(await cache.match(key));
+  } catch (error) {
+    console.warn(`Friendly history cache read failed: ${getErrorMessage(error)}`);
+  }
+  const age = now - cached?.updatedAt;
+  const usable = Number.isFinite(cached?.updatedAt) && age >= 0 &&
+    age < FRIENDLY_HISTORY_MAX_AGE_SECONDS * 1000 && Array.isArray(cached.matches);
+  const previous = usable ? cached.matches : [];
+  if (cached?.refreshAt > now) return previous;
+
+  let snapshot;
+  try {
+    const matches = await fetchFriendlyHistoryMonth(period, now);
+    snapshot = { matches, updatedAt: now, refreshAt: now + FRIENDLY_HISTORY_REFRESH_MS };
+  } catch (error) {
+    console.warn(`Friendly history refresh failed: ${getErrorMessage(error)}`);
+    snapshot = {
+      matches: previous,
+      updatedAt: usable ? cached.updatedAt : null,
+      refreshAt: now + FRIENDLY_HISTORY_RETRY_MS,
+    };
+  }
+
+  try {
+    await cache.put(key, Response.json(snapshot, {
+      headers: { "Cache-Control": `public, max-age=${FRIENDLY_HISTORY_MAX_AGE_SECONDS}` },
+    }));
+  } catch (error) {
+    console.warn(`Friendly history cache put failed: ${getErrorMessage(error)}`);
+  }
+  return snapshot.matches;
+}
+
+async function fetchFriendlyHistoryMonth(period, now) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FRIENDLY_HISTORY_TIMEOUT_MS);
+  try {
+    const url = `${ESPN_SUMMARY_BASE_URL}/${INTERNATIONAL_FRIENDLIES_CODE}/scoreboard?dates=${period}&limit=${ESPN_SCOREBOARD_EVENT_LIMIT}`;
+    const payload = await fetchJson(url, { signal: controller.signal }, (data) => {
+      validateEspnScoreboard(data);
+      const league = getPayloadLeagueMetadata(data);
+      if (league?.id !== INTERNATIONAL_FRIENDLIES_ID || league.code !== INTERNATIONAL_FRIENDLIES_CODE) {
+        throw new Error("International Friendlies archive identity did not match");
+      }
+    });
+    return normalizeEspnMatches(payload).filter((match) =>
+      match.leagueId === INTERNATIONAL_FRIENDLIES_ID && match.state === "finished" &&
+      isWithinLastResultWindow(Date.parse(match.kickoff || ""), now));
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -289,7 +377,7 @@ function groupMatchesByLeague(matches) {
   );
 
   for (const match of matches) {
-    const key = match.leagueCode || match.leagueId || match.league || "unknown";
+    const key = getScoreboardLeagueKey(match);
 
     if (!groups.has(key)) {
       groups.set(key, {

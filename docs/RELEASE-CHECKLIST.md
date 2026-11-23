@@ -26,9 +26,13 @@ does not load-test the service. The five-minute monitor remains in place.
 
 1. Run `npm run test:release`. It saves per-phase logs, JSON and a readable
    summary under `test-results/release-gate/`. Candidate and deployed-service
-   results are distinct. On Windows an installed Edge/Brave is selected when
-   available; `E2E_BROWSER_PATH` overrides it. Linux browser runs need a display
-   or `xvfb-run -a npm run test:release`. No browser is installed automatically.
+   results are distinct. Browser tests run headlessly without a visible window
+   or Xvfb. Install Playwright Chromium for local fixtures with `npx playwright
+   install --no-shell chromium` (add `--with-deps` on Linux CI). The real-API
+   browser run uses installed Edge on Windows when available, since the Worker
+   may reject bundled headless Chromium. `E2E_BROWSER_PATH` can select another
+   compatible browser; no requests are rewritten and no visible fallback is
+   used. Run the suite without `PWDEBUG` or `--debug`.
 2. Review the entire release diff, permission/CSP changes, third-party URLs,
    error paths, request budgets, cache expiry and rollback plan. Build/typecheck
    steps that do not exist in this plain-JavaScript project are not invented;

@@ -54,6 +54,41 @@ describe("popup DOM: concise league metadata", () => {
 describe("popup DOM: league match previews", () => {
   const select = (matches) => app.eval(`getLeaguePreviewMatch({matches:${JSON.stringify(matches)}})`);
   const preview = (match) => app.eval(`createLeagueMatchPreview(${JSON.stringify(match)})`);
+  const kickoffHoursAgo = hours => new Date(Date.now() - hours * 3600000).toISOString();
+
+  it("shows one dated fallback from cached results after day ten and removes it after day twenty", () => {
+    const now = Date.parse("2026-11-22T12:00:00Z");
+    const day = 86400000;
+    const kickoff = new Date(now - 10 * day).toISOString();
+    const code = "fifa.friendly";
+    const friendly = domMatch({ id: "friendly", leagueCode: code, homeTeam: "Japan", awayTeam: "Paraguay", state: "finished", kickoff });
+    const older = { ...friendly, id: "older", homeTeam: "Chile", kickoff: new Date(now - 12 * day).toISOString() };
+    const club = domMatch({ id: "club", state: "finished", kickoff: older.kickoff });
+    const payload = { matches: [friendly, older, club], leagues: [
+      { code, name: "International Friendlies", hasStandings: false, matches: [older, friendly] },
+      { code: "eng.1", name: "Premier League", matches: [club] },
+    ] };
+    app.eval(`globalThis.Date = class extends Date { static now() { return ${now}; } }`);
+    render(payload);
+    assert.ok(cardByName("International Friendlies").querySelector(".league-pick-preview--finished"));
+    cardByName("International Friendlies").click();
+    assert.equal(app.document.querySelectorAll(".match-card").length, 1);
+
+    app.eval(`globalThis.Date = class extends Date { static now() { return ${now + 1}; } }; __T.renderLast()`);
+    assert.equal(app.document.querySelectorAll(".match-card").length, 1);
+    const date = app.eval(`formatShortDate(${JSON.stringify(kickoff)})`);
+    assert.equal(app.document.querySelector(".match-card .time-badge").textContent, date);
+    app.document.getElementById("backBtn").click();
+    assert.equal(cardByName("International Friendlies").querySelector(".league-preview-status").textContent, `Full Time · ${date}`);
+    assert.ok(cardByName("Premier League").querySelector(".league-pick-preview--finished"));
+    cardByName("International Friendlies").click();
+
+    app.eval(`globalThis.Date = class extends Date { static now() { return ${now + 10 * day + 1}; } }; __T.renderLast()`);
+    assert.equal(app.document.querySelectorAll(".match-card").length, 0);
+    app.document.getElementById("backBtn").click();
+    assert.equal(cardByName("International Friendlies").querySelector(".league-pick-preview"), null);
+    assert.equal(cardByName("Premier League").querySelector(".league-pick-preview"), null);
+  });
 
   it("shows one live match and its real score directly below the league name", () => {
     render();
@@ -89,11 +124,11 @@ describe("popup DOM: league match previews", () => {
   });
 
   it("falls back to the latest finished kickoff when popularity is equal or unknown", () => {
-    const older = domMatch({ id: "old", homeTeam: "Alpha FC", awayTeam: "Minor FC", state: "finished", kickoff: "2026-10-05T10:00:00Z" });
-    const latest = domMatch({ id: "new", homeTeam: "Zulu FC", awayTeam: "Minor FC", state: "finished", kickoff: "2026-10-05T12:00:00Z" });
+    const older = domMatch({ id: "old", homeTeam: "Alpha FC", awayTeam: "Minor FC", state: "finished", kickoff: kickoffHoursAgo(4) });
+    const latest = domMatch({ id: "new", homeTeam: "Zulu FC", awayTeam: "Minor FC", state: "finished", kickoff: kickoffHoursAgo(2) });
     const invalid = domMatch({ id: "bad", homeTeam: "Minor FC", awayTeam: "Unknown FC", state: "finished", kickoff: "invalid" });
     assert.equal(select([older, invalid, latest]).id, "new");
-    assert.equal(select([{ ...invalid, id: "z", homeTeam: "Zulu FC" }, { ...invalid, id: "a", homeTeam: "Alpha FC" }]).id, "a");
+    assert.equal(select([invalid]), null);
     assert.equal(select([{ ...latest, id: "z" }, { ...latest, id: "a" }]).id, "a");
   });
 
@@ -102,7 +137,7 @@ describe("popup DOM: league match previews", () => {
     const popular = domMatch({ id: "popular", homeTeam: "Manchester United", awayTeam: "Liverpool" });
     assert.equal(select([small, popular]).id, "popular");
     assert.equal(select([popular, small]).id, "popular");
-    assert.equal(select([{ ...popular, state: "finished", kickoff: "2026-10-05T10:00:00Z" }, { ...small, state: "finished", kickoff: "2026-10-05T12:00:00Z" }]).id, "popular");
+    assert.equal(select([{ ...popular, state: "finished", kickoff: kickoffHoursAgo(4) }, { ...small, state: "finished", kickoff: kickoffHoursAgo(2) }]).id, "popular");
     assert.equal(select([{ ...popular, state: "finished" }, small]).id, "small");
     const derby = domMatch({ id: "derby", homeTeam: "Manchester United", awayTeam: "Manchester City" });
     assert.equal(select([popular, derby]).id, "derby");

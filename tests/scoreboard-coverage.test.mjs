@@ -5,6 +5,8 @@ import { loadWorkerContext, memoryCache, espnEvent, scoreboardResponse } from ".
 const ORIGIN = "chrome-extension://cdnpjnmhmagmiefkleefgchgffeaacaa";
 const json = value => new Response(JSON.stringify(value), {headers:{"Content-Type":"application/json"}});
 const payload = (events, code) => ({events, ...(code ? {leagues:[{slug:code}]} : {})});
+const emptyFriendlyHistory = () => json({ leagues: [{ id: "3922", slug: "fifa.friendly" }], events: [] });
+const isHistory = pathname => pathname.endsWith("/fifa.friendly/scoreboard");
 
 describe("complete and identity-safe scoreboard ingestion", () => {
   it("recognizes Europa and Conference League event IDs independently of their logo IDs", async () => {
@@ -21,13 +23,14 @@ describe("complete and identity-safe scoreboard ingestion", () => {
     const calls = [];
     const {run} = await loadWorkerContext({fetch:async input => {
       const url = new URL(input); calls.push(url);
+      if (isHistory(url.pathname)) return emptyFriendlyHistory();
       return scoreboardResponse(url.pathname.includes("/all/") ?
         (Number(url.searchParams.get("limit")) >= 1000 ? [...first100,missing] : first100) : []);
     }});
     const result = await run("getLiveMatches({})");
     assert.equal(result.matches.some(match => match.id === "401888371" && match.leagueCode === "tur.1" && match.state === "live"),true);
     assert.equal(calls.filter(url => url.pathname.includes("/all/")).length,1);
-    assert.equal(calls.length,5,"fix the aggregate query, not 32 extra requests on every refresh");
+    assert.equal(calls.filter(url => !isHistory(url.pathname)).length,5,"keep the core scoreboard fan-out bounded");
   });
 
   it("serves only men's senior friendlies from the aggregate and keeps the normal match window", async () => {
@@ -44,6 +47,7 @@ describe("complete and identity-safe scoreboard ingestion", () => {
     const { run } = await loadWorkerContext({ caches: { default: memoryCache() }, fetch: async input => {
       const url = new URL(input); calls.push(url.pathname);
       if (url.pathname.endsWith("/summary")) return json({ header: fixtures[2] });
+      if (isHistory(url.pathname)) return emptyFriendlyHistory();
       return scoreboardResponse(url.pathname.endsWith("/all/scoreboard") ? fixtures : []);
     } });
     const request = path => run(`handleRequest(new Request(${JSON.stringify(`https://api.atakanozkan.com${path}`)}, {headers:{Origin:"${ORIGIN}"}}), {})`);
@@ -58,12 +62,13 @@ describe("complete and identity-safe scoreboard ingestion", () => {
       ["401930895", "live"], ["401916336", "scheduled"], ["401933879", "finished"],
     ]);
     assert.deepEqual(friendlies.matches, matches);
-    assert.equal(calls.length, 5, "friendlies need no extra scoreboard request");
+    assert.equal(calls.filter(pathname => !isHistory(pathname)).length, 5);
+    const scoreboardCalls = calls.length;
 
     const standings = await request("/league-standings?leagueCode=fifa.friendly");
     assert.equal(standings.status, 200);
     assert.deepEqual(await standings.json(), { leagueCode: "fifa.friendly", standings: [] });
-    assert.equal(calls.length, 5, "older popups can request empty standings without ESPN traffic");
+    assert.equal(calls.length, scoreboardCalls, "older popups can request empty standings without ESPN traffic");
 
     const detail = await request("/match-detail?leagueCode=fifa.friendly&eventId=401933879");
     assert.equal(detail.status, 200);

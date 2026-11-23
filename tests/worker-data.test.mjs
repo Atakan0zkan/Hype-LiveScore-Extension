@@ -98,10 +98,11 @@ test("Worker accepts the alternate boxscore roster shape and supplies the public
 test("Worker uses the configured scoreboard fallback and filters far-away scheduled fixtures", async () => {
   const rows = [
     { idEvent: "1", strProgress: "Half Time", intHomeScore: 2, intAwayScore: 1 },
-    { idEvent: "2", strStatus: "Full Time", intHomeScore: 0, intAwayScore: 2 },
+    { idEvent: "2", strStatus: "Full Time", intHomeScore: 0, intAwayScore: 2, dateEvent: new Date(Date.now() - 11 * 86400000).toISOString() },
     { idEvent: "3", strStatus: "Scheduled", dateEvent: new Date(Date.now() + 3600000).toISOString() },
     { idEvent: "4", strStatus: "Scheduled", dateEvent: new Date(Date.now() + 172800000).toISOString() },
     { idEvent: "5", strStatus: "Live" },
+    { idEvent: "6", strStatus: "Full Time" },
   ].map(row => ({ ...row, idLeague: "fixture", strLeague: "Fallback League", strHomeTeam: "Home", strAwayTeam: "Away" }));
   let fallbackRequests = 0;
   const { ctx, run } = await loadWorkerContext({ fetch: async (input, init) => {

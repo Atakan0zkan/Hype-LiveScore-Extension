@@ -1,6 +1,6 @@
 {
   "name": "hype-score",
-  "version": "1.6.4",
+  "version": "1.6.5",
   "private": true,
   "type": "module",
   "description": "Hype - Live Football Scores Chrome Extension & Cloudflare Worker",
