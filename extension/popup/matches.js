@@ -1,4 +1,5 @@
 function openMatchDetail(league, match) {
+  if (!isEnabled) return;
   selectedLeagueKey = getLeagueKey(league);
   selectedMatchKey = getMatchKey(match);
   selectedMatchSnapshot = { ...match };
@@ -34,22 +35,35 @@ function renderMatchDetail(league, match) {
     cacheEntry = null;
   }
 
+  if (match.leagueCode && (!cacheEntry || shouldRefreshMatchDetail(cacheEntry, match))) {
+    loadMatchDetail(match, cacheEntry);
+    cacheEntry = matchDetailCache.get(key);
+  }
+  const displayEntry = cacheEntry?.previous || cacheEntry;
   if (!match.leagueCode) {
     leagueDetailContent.appendChild(createStatePanel(msg("detailsUnavailable")));
-  } else if (!cacheEntry) {
-    matchDetailCache.set(key, { status: "loading" });
-    leagueDetailContent.appendChild(createStatePanel(msg("loadingDetails")));
-    loadMatchDetail(match);
-  } else if (cacheEntry.status === "loading") {
-    leagueDetailContent.appendChild(createStatePanel(msg("loadingDetails")));
-  } else if (cacheEntry.status === "error") {
+  } else if (displayEntry?.status === "loaded") {
+    renderLoadedMatchDetail(displayEntry.data);
+  } else if (displayEntry?.status === "error") {
     leagueDetailContent.appendChild(createStatePanel(msg("detailsUnavailable"), true));
   } else {
-    renderLoadedMatchDetail(cacheEntry.data);
+    leagueDetailContent.appendChild(createStatePanel(msg("loadingDetails")));
   }
 
   showOnly("detail");
-  restoreViewState(`match:${getDetailCacheKey(match)}`, !cacheEntry || cacheEntry.status === "loading");
+  restoreViewState(`match:${key}`, cacheEntry?.status === "loading" && !cacheEntry.previous);
+}
+
+const MATCH_DETAIL_REFRESH_MS = 60000;
+const EMPTY_FINISHED_DETAIL_REFRESH_MS = 5 * MATCH_DETAIL_REFRESH_MS;
+
+function shouldRefreshMatchDetail(entry, match, now = Date.now()) {
+  if (entry.status !== "loaded" || !Number.isFinite(entry.loadedAt) || entry.retryAt > now) return false;
+  if (entry.matchState !== match.state) return true;
+  if (match.state === "finished" && entry.data?.state === "finished") {
+    return !entry.data.lineups?.length && now - entry.loadedAt >= EMPTY_FINISHED_DETAIL_REFRESH_MS;
+  }
+  return now - entry.loadedAt >= MATCH_DETAIL_REFRESH_MS;
 }
 
 function createDetailTeam(logoUrl, name) {
@@ -74,23 +88,30 @@ function createScoreBlock(match) {
   return block;
 }
 
-async function loadMatchDetail(match) {
+function restoreAbortedMatchDetail(key, entry) {
+  if (entry?.status !== "loading" || matchDetailCache.get(key) !== entry) return;
+  if (entry.previous) matchDetailCache.set(key, entry.previous);
+  else matchDetailCache.delete(key);
+}
+
+async function loadMatchDetail(match, previous = null) {
   abortDetailRequest();
   const controller = new AbortController();
   detailAbortController = controller;
   const key = getDetailCacheKey(match);
   detailAbortKey = key;
-  const loadingEntry = { status: "loading" };
+  const loadingEntry = { status: "loading", previous };
   matchDetailCache.set(key, loadingEntry);
   let shouldRender = true;
 
   try {
-    const data = await fetchMatchDetailWithRecovery(match, controller.signal);
+    const data = await fetchMatchDetailWithRecovery(match, controller.signal, Boolean(previous));
     if (controller.signal.aborted) throw createAbortError();
-    matchDetailCache.set(key, { status: "loaded", data });
+    if (!isDetailRecord(data)) throw new Error("Invalid match detail payload");
+    matchDetailCache.set(key, { status: "loaded", data, loadedAt: Date.now(), matchState: match.state });
   } catch (error) {
     if (error.name === "AbortError") {
-      if (matchDetailCache.get(key) === loadingEntry) matchDetailCache.delete(key);
+      restoreAbortedMatchDetail(key, loadingEntry);
       shouldRender = false;
     } else {
       if (isDailyRequestLimitError(error)) {
@@ -98,7 +119,10 @@ async function loadMatchDetail(match) {
         setStatus(msg("requestLimitReached"));
       }
       console.error(error);
-      matchDetailCache.set(key, { status: "error", failedAt: Date.now() });
+      const failedAt = Date.now();
+      matchDetailCache.set(key, previous
+        ? { ...previous, retryAt: failedAt + LAZY_ERROR_RETRY_MS }
+        : { status: "error", failedAt });
     }
   } finally {
     if (detailAbortController === controller) {
@@ -111,9 +135,11 @@ async function loadMatchDetail(match) {
   }
 }
 
-async function fetchMatchDetailWithRecovery(match, signal) {
+async function fetchMatchDetailWithRecovery(match, signal, revalidate = false) {
+  const options = revalidate ? { signal, cache: "no-store" } : { signal };
+  const fetchDetail = () => fetchJsonWithTimeout(buildMatchDetailUrl(match), options);
   try {
-    return await fetchJsonWithTimeout(buildMatchDetailUrl(match), { signal });
+    return await fetchDetail();
   } catch (error) {
     if (error.status !== 404 || signal.aborted) throw error;
     // A cold edge location may not know a card restored from local storage.
@@ -121,8 +147,16 @@ async function fetchMatchDetailWithRecovery(match, signal) {
     const payload = await fetchJsonWithTimeout(BACKEND_URL, { signal, cache: "reload" });
     if (!isValidLivePayload(payload) || !payload.matches.some((row) =>
       String(row.id) === String(match.id) && row.leagueCode === match.leagueCode)) throw error;
-    return fetchJsonWithTimeout(buildMatchDetailUrl(match), { signal });
+    return fetchDetail();
   }
+}
+
+function isDetailRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function getDetailRows(rows) {
+  return Array.isArray(rows) ? rows.filter(isDetailRecord) : [];
 }
 
 function renderLoadedMatchDetail(detail) {
@@ -149,7 +183,7 @@ function renderLoadedMatchDetail(detail) {
 }
 
 function appendDetailListSection(title, rows, renderer, emptyText = "", alwaysRender = false, key = title) {
-  const items = Array.isArray(rows) ? rows : [];
+  const items = getDetailRows(rows);
   if (!alwaysRender && items.length === 0) return;
   const section = createDetailSection(title, key);
   const list = document.createElement("div");
@@ -168,7 +202,7 @@ function appendDetailListSection(title, rows, renderer, emptyText = "", alwaysRe
 }
 
 function appendLineupsSection(lineups) {
-  const rows = (Array.isArray(lineups) ? lineups : []).filter((lineup) => lineup && typeof lineup === "object" && !Array.isArray(lineup)).slice(0, 2);
+  const rows = getDetailRows(lineups).slice(0, 2);
   rows.sort((a, b) => Number(b.homeAway === "home") - Number(a.homeAway === "home"));
   const section = document.createElement("section");
   section.className = "detail-section lineup-section";
@@ -215,28 +249,30 @@ function appendLineupsSection(lineups) {
     const grid = document.createElement("div");
     grid.className = starter ? "lineup-grid lineup-starters" : "lineup-grid lineup-substitutes";
     for (const lineup of rows) {
-    const column = document.createElement("div");
-    column.className = "lineup-team";
-    const title = document.createElement("div");
-    title.className = "lineup-title";
-    title.append(
-      createLogoImage("lineup-logo", lineup.logo, lineup.team),
-      createTextElement("strong", "", lineup.team),
-    );
-    const players = document.createElement("div");
-    players.className = "lineup-players";
-    for (const player of (Array.isArray(lineup.players) ? lineup.players : []).filter((player) => player && player.starter === starter).slice(0, 50)) {
-      players.appendChild(
-        createTextElement(
-          "span",
-          starter ? "lineup-player lineup-player--starter" : "lineup-player",
-          [player.jersey, player.name, player.position].filter(Boolean).join(" · "),
-        ),
+      const column = document.createElement("div");
+      column.className = "lineup-team";
+      const title = document.createElement("div");
+      title.className = "lineup-title";
+      title.append(
+        createLogoImage("lineup-logo", lineup.logo, lineup.team),
+        createTextElement("strong", "", lineup.team),
       );
-    }
-    if (!players.childElementCount) players.appendChild(createTextElement("p", "detail-empty", msg("noSectionData")));
-    column.append(title, players);
-    grid.appendChild(column);
+      const players = document.createElement("div");
+      players.className = "lineup-players";
+      for (const player of (Array.isArray(lineup.players) ? lineup.players : []).filter((player) => player && player.starter === starter).slice(0, 50)) {
+        // ESPN sometimes sends SUB instead of a position, even for confirmed starters.
+        const position = typeof player.position === "string" ? player.position.trim() : "";
+        players.appendChild(
+          createTextElement(
+            "span",
+            starter ? "lineup-player lineup-player--starter" : "lineup-player",
+            [player.jersey, player.name, position.toUpperCase() === "SUB" ? "" : position].filter(Boolean).join(" · "),
+          ),
+        );
+      }
+      if (!players.childElementCount) players.appendChild(createTextElement("p", "detail-empty", msg("noSectionData")));
+      column.append(title, players);
+      grid.appendChild(column);
     }
     return grid;
   };
@@ -289,10 +325,52 @@ function getPitchPlayerName(player) {
   return parts.length > 1 ? `${parts[0][0]}. ${parts.slice(1).join(" ")}` : parts[0];
 }
 
+// Verified ESPN formationPlace values, ordered goal-to-attack and left-to-right
+// within each line. These are provider slot IDs, not shirt numbers or row indexes.
+const ESPN_FORMATION_PLACES = new Map(Object.entries({
+  "3-4-1-2": [[1], [4, 5, 6], [3, 8, 7, 2], [9], [11, 10]],
+  "3-4-2-1": [[1], [4, 5, 6], [3, 8, 7, 2], [11, 10], [9]],
+  "3-4-3": [[1], [4, 5, 6], [3, 8, 7, 2], [11, 9, 10]],
+  "3-5-2": [[1], [4, 5, 6], [3, 8, 11, 7, 2], [9, 10]],
+  "4-1-4-1": [[1], [3, 6, 5, 2], [4], [11, 10, 8, 7], [9]],
+  "4-2-2-2": [[1], [3, 6, 5, 2], [8, 4], [11, 7], [9, 10]],
+  "4-2-3-1": [[1], [3, 6, 5, 2], [8, 4], [11, 10, 7], [9]],
+  "4-3-3": [[1], [3, 6, 5, 2], [8, 4, 7], [11, 9, 10]],
+  "4-4-1-1": [[1], [3, 6, 5, 2], [11, 8, 4, 7], [10], [9]],
+  "4-4-2": [[1], [3, 6, 5, 2], [11, 8, 4, 7], [9, 10]],
+  "4-5-1": [[1], [3, 6, 5, 2], [11, 8, 10, 4, 7], [9]],
+  "5-4-1": [[1], [3, 4, 5, 6, 2], [11, 10, 8, 7], [9]],
+}));
+
+function getProviderPitchLayout(formation, starters) {
+  const template = ESPN_FORMATION_PLACES.get(formation);
+  if (!template) return null;
+  const playersByPlace = new Map();
+  for (const player of starters) {
+    const place = player.formationPlace;
+    const position = typeof player.position === "string" ? player.position.trim().toUpperCase() : "";
+    if (!Number.isInteger(place) || place < 1 || place > 11 || playersByPlace.has(place) ||
+        position === "SUB" || ((position === "G" || position === "GK") && place !== 1)) return null;
+    playersByPlace.set(place, player);
+  }
+  return template.map(line => line.map(place => playersByPlace.get(place)));
+}
+
 function getPitchLayout(lineup) {
-  const starters = (Array.isArray(lineup.players) ? lineup.players : []).filter((p) => p?.starter);
+  const starters = (Array.isArray(lineup.players) ? lineup.players : []).filter((p) => p?.starter === true);
   if (starters.length !== 11) return null;
-  const ranks = { G: 0, GK: 0, LB: 1, RB: 1, CB: 1, CD: 1, D: 1, LWB: 2, RWB: 2, DM: 2, CDM: 2, CM: 3, LM: 3, RM: 3, M: 3, AM: 4, CAM: 4, LW: 4, RW: 4, F: 5, CF: 5, ST: 5, LF: 5, RF: 5 };
+  const knownIds = starters.map(player => player.id).filter(id => typeof id === "string" && id);
+  if (new Set(knownIds).size !== knownIds.length) return null;
+  const providerLayout = getProviderPitchLayout(lineup.formation, starters);
+  if (providerLayout) return providerLayout;
+  const ranks = {
+    G: 0, GK: 0,
+    LB: 1, RB: 1, CB: 1, CD: 1, D: 1,
+    LWB: 2, RWB: 2, DM: 2, CDM: 2,
+    CM: 3, LM: 3, RM: 3, M: 3,
+    AM: 4, CAM: 4, LW: 4, RW: 4, RCF: 4, // ESPN's Rear Center Forward plays behind the striker.
+    F: 5, CF: 5, ST: 5, LF: 5, RF: 5,
+  };
   const lanes = new Map();
   for (const player of starters) {
     const position = String(player.position || "").toUpperCase();
@@ -307,7 +385,7 @@ function getPitchLayout(lineup) {
 }
 
 function appendStatsSection(stats, teams) {
-  const rows = Array.isArray(stats) ? stats : [];
+  const rows = getDetailRows(stats);
   const section = createDetailSection(msg("stats"), "stats");
   const list = document.createElement("div");
   list.className = "stats-list";
@@ -334,7 +412,7 @@ function appendLinkSection(title, rows, emptyText = "", alwaysRender = false) {
   const section = createDetailSection(title, "links");
   const list = document.createElement("div");
   list.className = "link-list";
-  for (const row of Array.isArray(rows) ? rows : []) {
+  for (const row of getDetailRows(rows)) {
     if (row.url) list.appendChild(createExternalLink(row.title || row.label, row.url));
   }
   if (list.childElementCount > 0) {
@@ -357,8 +435,7 @@ function appendNewsHighlightsSection(news, videos) {
   const list = document.createElement("div");
   list.className = "media-list";
 
-  for (const video of Array.isArray(videos) ? videos : []) {
-    if (!video) continue;
+  for (const video of getDetailRows(videos)) {
     const safeUrl = sanitizeExternalUrl(video.url, ["espn.com"]);
     const card = document.createElement(safeUrl ? "a" : "div");
     card.className = "video-card video-card--highlight";
@@ -377,8 +454,8 @@ function appendNewsHighlightsSection(news, videos) {
     list.appendChild(card);
   }
 
-  for (const article of Array.isArray(news) ? news : []) {
-    if (article?.url) list.appendChild(createExternalLink(article.title || article.label, article.url));
+  for (const article of getDetailRows(news)) {
+    if (article.url) list.appendChild(createExternalLink(article.title || article.label, article.url));
   }
   section.appendChild(list.childElementCount ? list : createTextElement("p", "detail-empty", msg("noSectionData")));
   leagueDetailContent.appendChild(section);

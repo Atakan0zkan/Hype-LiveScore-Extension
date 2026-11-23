@@ -37,7 +37,7 @@ globalThis.fetch = async (input) => {
 
   if (url.includes(`/summary?event=${KNOWN_EVENT_ID}`)) {
     await delay(25);
-    return jsonResponse({});
+    return jsonResponse({ header: { id: KNOWN_EVENT_ID } });
   }
 
   if (pathname.endsWith("/uefa.nations/scoreboard")) {

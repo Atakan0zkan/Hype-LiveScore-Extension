@@ -193,6 +193,7 @@ function getTournamentRoundLabel(slug, fallbackName) {
 }
 
 async function loadTournamentBracket(leagueCode) {
+  const loadingEntry = tournamentBracketCache.get(leagueCode);
   try {
     const data = await fetchJsonWithTimeout(buildTournamentBracketUrl(leagueCode));
     tournamentBracketCache.set(leagueCode, {
@@ -204,6 +205,10 @@ async function loadTournamentBracket(leagueCode) {
         : [],
     });
   } catch (error) {
+    if (error.name === "AbortError") {
+      if (tournamentBracketCache.get(leagueCode) === loadingEntry) tournamentBracketCache.delete(leagueCode);
+      return;
+    }
     if (isDailyRequestLimitError(error)) {
       dailyLimitReached = true;
       setStatus(msg("requestLimitReached"));
@@ -211,7 +216,7 @@ async function loadTournamentBracket(leagueCode) {
     console.error(error);
     tournamentBracketCache.set(leagueCode, { status: "error", failedAt: Date.now() });
   } finally {
-    updateVisibleTournamentBracket(leagueCode);
+    if (isEnabled) updateVisibleTournamentBracket(leagueCode);
   }
 }
 
@@ -294,6 +299,7 @@ function createStandingsSection(league) {
 }
 
 async function loadLeagueStandings(leagueCode) {
+  const loadingEntry = leagueStandingsCache.get(leagueCode);
   try {
     const data = await fetchJsonWithTimeout(buildLeagueStandingsUrl(leagueCode));
     leagueStandingsCache.set(leagueCode, {
@@ -303,6 +309,10 @@ async function loadLeagueStandings(leagueCode) {
         ? data.standings : [],
     });
   } catch (error) {
+    if (error.name === "AbortError") {
+      if (leagueStandingsCache.get(leagueCode) === loadingEntry) leagueStandingsCache.delete(leagueCode);
+      return;
+    }
     if (isDailyRequestLimitError(error)) {
       dailyLimitReached = true;
       setStatus(msg("requestLimitReached"));
@@ -310,7 +320,7 @@ async function loadLeagueStandings(leagueCode) {
     console.error(error);
     leagueStandingsCache.set(leagueCode, { status: "error", failedAt: Date.now() });
   } finally {
-    if (lastPayload && selectedLeagueKey && !selectedMatchKey) {
+    if (isEnabled && lastPayload && selectedLeagueKey && !selectedMatchKey) {
       renderPayload(lastPayload);
     }
   }

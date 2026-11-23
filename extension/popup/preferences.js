@@ -60,9 +60,7 @@ function setSettingsOpen(open) {
   settingsPanel.hidden = !open;
   appShell.classList.toggle("app-shell--settings-open", open);
   settingsToggle.setAttribute("aria-expanded", String(open));
-  for (const element of [loadingState, errorState, emptyState, leaguePickList, leagueDetailView]) {
-    element.inert = open;
-  }
+  syncFootballViewInteractivity();
   if (open) {
     clearSettingsStatus();
     settingsPanel.querySelector('input[name="popupSize"]:checked')?.focus();
@@ -211,7 +209,7 @@ function togglePower() {
     clearTimeout(refreshTimer);
     clearTimeout(sessionAutoPauseTimer);
     clearTimeout(inactivityTimer);
-    abortDetailRequest();
+    abortPendingApiRequests();
   }
 }
 
@@ -223,6 +221,7 @@ function restoreEnabledState() {
 function applyEnabledState() {
   updatePowerToggleLabel();
   enforceSnapshotExpiry();
+  syncFootballViewInteractivity();
 
   if (isEnabled) {
     appShell.classList.remove("app-shell--disabled");
@@ -233,6 +232,12 @@ function applyEnabledState() {
     powerToggle.classList.add("power-toggle--off");
     addOverlay();
     setStatus(msg("paused"));
+  }
+}
+
+function syncFootballViewInteractivity() {
+  for (const element of [loadingState, errorState, emptyState, leaguePickList, leagueDetailView]) {
+    element.inert = isSettingsOpen || !isEnabled;
   }
 }
 

@@ -38,7 +38,7 @@ import {
   ESPN_SUMMARY_BASE_URL,
 } from "./upstream.js";
 import { normalizeEspnStandings, normalizeTournamentBracket } from "./competition-tables.js";
-import { normalizeEspnMatchDetail } from "./match-detail.js";
+import { normalizeEspnMatchDetail, validateEspnMatchDetailIdentity } from "./match-detail.js";
 
 let liveMatchesRefreshPromise = null;
 const standingsRefreshPromises = new Map();
@@ -432,6 +432,7 @@ async function refreshStandingsForLeague(leagueCode) {
 async function refreshMatchDetail(eventId, leagueCode, cache, cacheKey) {
   const payload = await fetchJson(
     `${ESPN_SUMMARY_BASE_URL}/${leagueCode}/summary?event=${eventId}`,
+    {}, (data) => validateEspnMatchDetailIdentity(data, eventId, leagueCode),
   );
   if (leagueCode === FIFA_WORLD_CUP_LEAGUE_CODE && !isWorldCup2030Event(payload?.header)) {
     throw new Error("World Cup match summary is not from the 2030 tournament");

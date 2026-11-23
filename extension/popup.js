@@ -108,6 +108,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function renderPayload(payload) {
+  if (!isEnabled) return;
   if (enforceSnapshotExpiry() === false) return;
   if (isSettingsOpen) return;
   const leagues = normalizeLeagueGroups(payload);
@@ -210,9 +211,7 @@ function setStatus(text) {
 function abortDetailRequest() {
   if (detailAbortController) {
     detailAbortController.abort();
-    if (matchDetailCache.get(detailAbortKey)?.status === "loading") {
-      matchDetailCache.delete(detailAbortKey);
-    }
+    restoreAbortedMatchDetail(detailAbortKey, matchDetailCache.get(detailAbortKey));
     detailAbortController = null;
     detailAbortKey = null;
   }

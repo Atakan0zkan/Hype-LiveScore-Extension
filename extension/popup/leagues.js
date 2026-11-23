@@ -36,7 +36,7 @@ function renderLeaguePickList(leagues) {
     info.className = "league-pick-info";
 
     const metaText = buildLeagueMetaText(league, liveCount, upcomingCount);
-    const previewMatch = getLeaguePreviewMatch(league);
+    const previewMatch = getLeaguePreviewMatch(league, league.matches);
 
     info.appendChild(createTextElement("span", "league-pick-name", league.name));
     if (previewMatch) {
@@ -66,10 +66,9 @@ function renderLeaguePickList(leagues) {
   restoreViewState("pick");
 }
 
-function getLeaguePreviewMatch(league) {
+function getLeaguePreviewMatch(league, matches = selectLeagueResults(Array.isArray(league?.matches) ? league.matches : [])) {
   let liveMatch = null;
   let finishedMatch = null;
-  const matches = selectLeagueResults(Array.isArray(league?.matches) ? league.matches : []);
 
   for (const match of matches) {
     if (!match || typeof match.homeTeam !== "string" || !match.homeTeam.trim() ||
@@ -93,12 +92,6 @@ function getLeaguePreviewMatch(league) {
 function compareLeaguePreviewMatches(a, b, leagueCode) {
   const popularityDiff = getMatchPopularityScore(b, leagueCode) - getMatchPopularityScore(a, leagueCode);
   if (popularityDiff) return popularityDiff;
-  if (a.state === "finished" && b.state === "finished") {
-    const aTime = typeof a.kickoff === "string" ? Date.parse(a.kickoff) : NaN;
-    const bTime = typeof b.kickoff === "string" ? Date.parse(b.kickoff) : NaN;
-    const latestDiff = (Number.isFinite(bTime) ? bTime : -Infinity) - (Number.isFinite(aTime) ? aTime : -Infinity);
-    if (latestDiff) return latestDiff;
-  }
   return compareMatches(a, b) || getMatchKey(a).localeCompare(getMatchKey(b));
 }
 
@@ -320,13 +313,16 @@ function normalizeLeagueGroups(payload) {
   const leagues = Array.isArray(payload.leagues) && payload.leagues.length > 0
     ? payload.leagues.filter((league) => league && typeof league.name === "string" && Array.isArray(league.matches))
     : buildLeagueGroupsFromMatches(payload.matches || []);
+  const now = Date.now();
 
   return leagues
     .map((league) => ({
       ...league,
       name: league.code === FIFA_WORLD_CUP_LEAGUE_CODE ? "FIFA World Cup 2030" : league.name,
-      matches: sortMatchesForDisplay(selectLeagueResults(league.code === FIFA_WORLD_CUP_LEAGUE_CODE
-        ? league.matches.filter(isWorldCup2030Match) : league.matches)),
+      // The picker needs counts and a preview, not sorted match rows.
+      // Only the selected league sorts its visible sections.
+      matches: selectLeagueResults(league.code === FIFA_WORLD_CUP_LEAGUE_CODE
+        ? league.matches.filter(isWorldCup2030Match) : league.matches, now),
     }))
     .filter((league) => league.matches.length > 0 || league.code || league.id)
     .sort(compareLeagues);
@@ -414,6 +410,13 @@ function sortMatchesForDisplay(matches) {
 function compareMatches(a, b) {
   const stateDiff = getMatchStateRank(a.state) - getMatchStateRank(b.state);
   if (stateDiff !== 0) return stateDiff;
+
+  if (a.state === "finished") {
+    const aTime = typeof a.kickoff === "string" ? Date.parse(a.kickoff) : NaN;
+    const bTime = typeof b.kickoff === "string" ? Date.parse(b.kickoff) : NaN;
+    const latestDiff = (Number.isFinite(bTime) ? bTime : -Infinity) - (Number.isFinite(aTime) ? aTime : -Infinity);
+    if (latestDiff) return latestDiff;
+  }
 
   return (a.homeTeam || "").localeCompare(b.homeTeam || "");
 }

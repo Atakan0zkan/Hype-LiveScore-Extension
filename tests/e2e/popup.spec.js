@@ -252,6 +252,12 @@ test("readable stats, event timeline and two starting XIs fit the popup", async 
   const pitch = page.locator(".lineup-pitch");
   await expect(pitch).toBeVisible();
   await expect(pitch.locator(".pitch-player")).toHaveCount(22);
+  const homeLines = pitch.locator(".pitch-half--home .pitch-line");
+  await expect(homeLines).toHaveCount(5);
+  const rearForward = homeLines.nth(3).getByLabel("Randal Kolo Muani · RCF");
+  await expect(rearForward.locator(".pitch-name")).toHaveText("R. Kolo Muani");
+  await expect(rearForward.locator(".pitch-shirt")).toHaveText("10");
+  await expect(homeLines.nth(4).getByLabel("Dominic Calvert-Lewin · F")).toBeVisible();
   await expect(page.locator(".lineup-substitutes .lineup-player")).toHaveCount(4);
   await expect(page.locator(".lineup-player--starter")).toHaveCount(0);
   await expect(page.locator("summary", { hasText: "Full squads" })).toHaveCount(0);

@@ -1,3 +1,12 @@
+const activeApiRequests = new Set();
+
+function abortPendingApiRequests() {
+  abortDetailRequest();
+  for (const controller of activeApiRequests) controller.abort();
+  activeApiRequests.clear();
+  liveLoadPromise = null;
+}
+
 function startLiveDataFlow() {
   if (isFilePreview()) {
     hasLoadedOnce = true;
@@ -147,9 +156,10 @@ function hydrateFromClientCache() {
 
 function loadMatches(options = {}) {
   if (!liveLoadPromise) {
-    liveLoadPromise = performLoadMatches(options).finally(() => {
-      liveLoadPromise = null;
+    const pending = performLoadMatches(options).finally(() => {
+      if (liveLoadPromise === pending) liveLoadPromise = null;
     });
+    liveLoadPromise = pending;
   }
 
   return liveLoadPromise;
@@ -168,6 +178,7 @@ async function performLoadMatches({ force = false } = {}) {
 
   let didSucceed = false;
   let didHitDailyLimit = false;
+  let wasAborted = false;
 
   try {
     const payload = await fetchJsonWithTimeout(BACKEND_URL, { cache: "no-store" });
@@ -189,6 +200,10 @@ async function performLoadMatches({ force = false } = {}) {
     hasLoadedOnce = true;
     didSucceed = true;
   } catch (error) {
+    if (error.name === "AbortError") {
+      wasAborted = true;
+      return;
+    }
     if (isDailyRequestLimitError(error)) {
       didHitDailyLimit = true;
       dailyLimitReached = true;
@@ -211,7 +226,7 @@ async function performLoadMatches({ force = false } = {}) {
       scheduleNextRefresh(lastPayload, lastDataIsStale
         ? Math.min(LIVE_REFRESH_INTERVAL_MS, getRefreshInterval(lastPayload))
         : getRefreshInterval(lastPayload));
-    } else if (!didHitDailyLimit) {
+    } else if (!didHitDailyLimit && !wasAborted) {
       scheduleErrorRetry();
     }
   }
@@ -527,7 +542,7 @@ function createAbortError() {
 
 async function fetchJsonWithTimeout(url, options = {}) {
   const { headers = {}, signal: externalSignal, ...rest } = options;
-  if (externalSignal && externalSignal.aborted) {
+  if (!isEnabled || externalSignal?.aborted) {
     throw createAbortError();
   }
 
@@ -536,6 +551,7 @@ async function fetchJsonWithTimeout(url, options = {}) {
   }
 
   const controller = new AbortController();
+  activeApiRequests.add(controller);
   let timedOut = false;
   let removeAbortListener = () => {};
 
@@ -558,6 +574,7 @@ async function fetchJsonWithTimeout(url, options = {}) {
   try {
     const response = await fetch(url, {
       ...rest,
+      redirect: "error",
       headers: {
         Accept: "application/json",
         ...headers,
@@ -565,6 +582,7 @@ async function fetchJsonWithTimeout(url, options = {}) {
       signal: controller.signal,
     });
 
+    if (controller.signal.aborted) throw createAbortError();
     if (!response.ok) {
       const error = new Error("Backend returned " + response.status);
       error.status = response.status;
@@ -577,14 +595,17 @@ async function fetchJsonWithTimeout(url, options = {}) {
     }
 
     const data = await response.json();
+    if (controller.signal.aborted) throw createAbortError();
     recordDailyRequestSuccess();
     return data;
   } catch (error) {
-    if (timedOut && error.name === "AbortError") {
-      throw new Error("Request timed out");
+    if (controller.signal.aborted) {
+      if (timedOut) throw new Error("Request timed out");
+      throw createAbortError();
     }
     throw error;
   } finally {
+    activeApiRequests.delete(controller);
     clearTimeout(timeoutId);
     removeAbortListener();
   }

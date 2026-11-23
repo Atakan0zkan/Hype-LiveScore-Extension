@@ -190,7 +190,7 @@ describe("known-event registry survives live-cache expiry and isolate changes", 
     let calls = 0;
     const second = await loadWorkerContext({ caches: { default: cache }, fetch: async () => {
       calls += 1;
-      return scoreboardResponse([]);
+      return Response.json({ header: espnEvent({ id: "760486" }) });
     } });
     assert.equal(second.run("rememberedEventKeys.size"), 0);
     assert.equal(await second.run('isKnownMatchDetailEvent(caches.default,"760486","eng.1")'), true);
@@ -210,6 +210,43 @@ describe("known-event registry survives live-cache expiry and isolate changes", 
     assert.equal(await run('isKnownMatchDetailEvent(caches.default,"760486","eng.1")'), false);
     await run('persistKnownMatches(caches.default, Array.from({length:1100},(_,i)=>({id:String(100000+i),leagueCode:"eng.1"})))');
     assert.equal((await run('readKnownMatches(caches.default)')).length, 1024);
+  });
+});
+
+describe("Worker validates upstream match-detail identity before caching", () => {
+  const eventId = "760486";
+  const detailPath = `/match-detail?eventId=${eventId}&leagueCode=eng.1`;
+  const call = (run) => run(`handleRequest(new Request("https://api.atakanozkan.com${detailPath}", {headers:{Origin:"${EXT_ORIGIN}"}}), {})`);
+
+  for (const [reason, reply] of [
+    ["different event", { header: { id: "760487" } }],
+    ["different league", { header: { id: eventId, league: { slug: "esp.1" } } }],
+    ["different competition", { header: { id: eventId, competitions: [{ id: "760487" }] } }],
+    ["no event identity", { error: "Unavailable" }],
+  ]) {
+    it(`returns a non-cacheable error for a 200 with ${reason}`, async () => {
+      const cache = memoryCache();
+      const { run } = await loadWorkerContext({ caches: { default: cache }, fetch: async () => Response.json(reply) });
+      run(`rememberKnownMatches([{id:"${eventId}",leagueCode:"eng.1"}])`);
+      const response = await call(run);
+      assert.equal(response.status, 502);
+      assert.equal(response.headers.get("Cache-Control"), "no-store");
+      assert.deepEqual(await response.json(), { error: "Match detail could not be fetched" });
+      assert.equal(cache.size(), 0);
+    });
+  }
+
+  it("uses the existing alternate ESPN host when the first host supplies a mismatched summary", async () => {
+    let calls = 0;
+    const { run } = await loadWorkerContext({ fetch: async () => {
+      const currentId = ++calls === 1 ? "760487" : eventId;
+      return Response.json({ header: espnEvent({ id: currentId }) });
+    } });
+    run(`rememberKnownMatches([{id:"${eventId}",leagueCode:"eng.1"}])`);
+    const response = await call(run);
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).id, eventId);
+    assert.equal(calls, 2);
   });
 });
 const UNPACKED_ORIGIN = "chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

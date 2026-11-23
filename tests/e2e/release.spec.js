@@ -7,11 +7,22 @@ test("candidate Worker to candidate popup preserves real event identities and la
   const event=espnEvent({id:"401888371",leagueId:"3946"});
   event.competitions[0].competitors[0].team.displayName="Galatasaray";
   event.competitions[0].competitors[1].team.displayName="Amed SFK";
+  const positions=["G","RB","LB","CM-R","CD-R","CD-L","RM","CM-L","F","UNRECOGNIZED","LM"];
+  const rosters=event.competitions[0].competitors.map(({team,homeAway})=>({
+    team,homeAway,formation:"4-4-1-1",
+    roster:positions.map((abbreviation,i)=>({
+      athlete:{id:String(i+1),displayName:`${team.displayName} Player ${i+1}`},
+      jersey:String(i+1),position:{abbreviation},starter:true,formationPlace:String(i+1),
+    })),
+  }));
   const {run}=await loadWorkerContext({caches:{default:memoryCache()},fetch:async input=>{
     const url=new URL(input);upstream.push(url.pathname);
     if(url.pathname.endsWith("/all/scoreboard"))return scoreboardResponse([event]);
     if(url.pathname.endsWith("/standings"))return new Response(JSON.stringify({standings:{entries:[{team:{displayName:"Galatasaray"},note:{description:"Champions League"},stats:[{name:"rank",value:1}]}]}}),{headers:{"Content-Type":"application/json"}});
-    if(url.pathname.endsWith("/summary"))return new Response(JSON.stringify({news:{articles:[{headline:"Candidate Worker report",links:{web:{href:"https://www.espn.com/soccer/report/_/gameId/401888371"}}}]}}),{headers:{"Content-Type":"application/json"}});
+    if(url.pathname.endsWith("/summary"))return Response.json({
+      header:event,rosters,
+      news:{articles:[{headline:"Candidate Worker report",links:{web:{href:"https://www.espn.com/soccer/report/_/gameId/401888371"}}}]},
+    });
     return scoreboardResponse([]);
   }});
   const calls=[];
@@ -27,6 +38,10 @@ test("candidate Worker to candidate popup preserves real event identities and la
   await app.page.locator(".match-card",{hasText:"Galatasaray"}).click();
   await expect(app.page.locator(".detail-team-name")).toHaveText(["Galatasaray","Amed SFK"]);
   await expect(app.page.locator("#leagueDetailContent")).toContainText("Candidate Worker report");
+  await expect(app.page.locator(".lineup-pitch .pitch-player")).toHaveCount(22);
+  const rearForward=app.page.locator(".pitch-half--home .pitch-line").nth(3)
+    .getByLabel("Galatasaray Player 10 · UNRECOGNIZED");
+  await expect(rearForward.locator(".pitch-shirt")).toHaveText("10");
   await app.page.locator("#backBtn").click();
   await app.page.locator(".match-card",{hasText:"Galatasaray"}).click();
   expect(calls.filter(path=>path==="/match-detail")).toHaveLength(1);
@@ -54,6 +69,23 @@ test("visible controls have usable names and 24px targets; hidden screens are no
   expect(await app.page.locator("#leaguePickList").evaluate(el=>el.inert)).toBe(true);
   await expect(app.page.locator("#feedbackEmail")).toHaveAttribute("href","mailto:atakanozkanapps@gmail.com");
   await expect(app.page.locator("#settingsVersion")).toHaveText(await app.page.evaluate(()=>chrome.runtime.getManifest().version));
+});
+
+test("power off keeps the football view out of keyboard navigation even after visiting settings",async({app})=>{
+  const {calls}=await servePopup(app);
+  await expect(app.page.locator(".league-pick-card").first()).toBeVisible();
+  const before=calls.length;
+  await app.page.locator("#powerToggle").click();
+  await expect(app.page.locator("#leaguePickList")).toHaveAttribute("inert","");
+  await app.page.locator("#settingsToggle").click();
+  await app.page.locator("#settingsClose").click();
+  await expect(app.page.locator("#leaguePickList")).toHaveAttribute("inert","");
+  const league=app.page.locator(".league-pick-card").first();
+  await league.evaluate(el=>el.focus());
+  await expect(league).not.toBeFocused();
+  expect(calls).toHaveLength(before);
+  await app.page.locator("#powerToggle").click();
+  await expect(app.page.locator("#leaguePickList")).not.toHaveAttribute("inert","");
 });
 
 test("960-match rendering stays within a performance budget and repeated refreshes do not accumulate DOM",async({app},info)=>{

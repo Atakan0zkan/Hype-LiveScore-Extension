@@ -95,6 +95,41 @@ test("Worker accepts the alternate boxscore roster shape and supplies the public
   assert.deepEqual(normalizeEspnMatchDetail({}, { eventId: "unknown", leagueCode }).links, []);
 });
 
+test("Worker carries bounded match formation places and prefers the match jersey over profile data", () => {
+  const payload = { rosters: [{ team: home.team, homeAway: "home", formation: "4-4-1-1", roster: [
+    { athlete: { id: "8", displayName: "Rear Forward", jersey: "99" }, jersey: "8", starter: true, formationPlace: "10" },
+    { athlete: { id: "9", displayName: "Striker", jersey: "9" }, starter: true, formationPlace: 9 },
+    { athlete: { id: "2", displayName: "Invalid Places" }, starter: true, formationPlace: "12" },
+    { athlete: { id: "14", displayName: "Substitute" }, starter: false, formationPlace: "14" },
+  ] }] };
+  const { lineups } = normalizeEspnMatchDetail(payload, { eventId, leagueCode });
+  assert.deepEqual(Object.fromEntries(lineups[0].players.map(p => [p.name, [p.formationPlace, p.jersey]])), {
+    "Rear Forward": [10, "8"], Striker: [9, "9"],
+    "Invalid Places": [undefined, ""], Substitute: [undefined, ""],
+  });
+});
+
+test("a missing competitor, record, or player row does not discard valid match details", () => {
+  const competition = {
+    id: eventId, date: kickoff,
+    competitors: [null, { ...home, records: [null, { summary: "5-1-0" }] }, away],
+  };
+  const payload = {
+    header: { id: eventId, competitions: [competition] },
+    headToHeadGames: [{ id: "100001", competitions: [competition] }],
+    rosters: [{ team: home.team, homeAway: "home", roster: [
+      null,
+      { athlete: { displayName: null, shortName: "Named Starter" }, starter: true },
+      { athlete: { displayName: 7 }, starter: true },
+    ] }],
+  };
+  const result = normalizeEspnMatchDetail(payload, { eventId, leagueCode });
+  assert.equal(result.title, "Home FC vs Away FC");
+  assert.equal(result.teams.home.record, "5-1-0");
+  assert.equal(result.headToHead.length, 1);
+  assert.deepEqual(result.lineups[0].players.map(p => p.name), ["Named Starter"]);
+});
+
 test("Worker uses the configured scoreboard fallback and filters far-away scheduled fixtures", async () => {
   const rows = [
     { idEvent: "1", strProgress: "Half Time", intHomeScore: 2, intAwayScore: 1 },

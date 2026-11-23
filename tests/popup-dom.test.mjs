@@ -343,6 +343,19 @@ describe("match presentation", () => {
     assert.equal(app.document.querySelectorAll(".lineup-substitutes .lineup-player").length, 2);
   });
 
+  it("lists the confirmed starting XIs without calling them subs when tactical positions are missing", () => {
+    const rows = ["Andorra", "Azerbaijan"].map(team => {
+      const row = lineup(team);
+      return { ...row, players: row.players.filter(player => player.starter).map(player => ({ ...player, position: "SUB" })) };
+    });
+    app.eval(`appendLineupsSection(${JSON.stringify(rows)})`);
+    assert.equal(app.document.querySelector(".lineup-pitch"), null);
+    const starters = [...app.document.querySelectorAll(".lineup-starters .lineup-player")];
+    assert.equal(starters.length, 22);
+    assert.equal(starters[0].textContent, "1 · Andorra Player 0");
+    assert.ok(starters.every(player => !player.textContent.endsWith(" · SUB")));
+  });
+
   it("handles absent or malformed rosters without inventing substitute players", () => {
     app.eval('appendLineupsSection([null, {team:"Home",players:{}}, {team:"Away",players:[null]}])');
     assert.equal(app.document.querySelectorAll(".lineup-player").length, 0);
@@ -358,6 +371,26 @@ describe("match presentation", () => {
 });
 
 describe("popup DOM: league list", () => {
+  it("shows Results from newest kickoff to oldest, including matches on the same day", () => {
+    const finished = (homeTeam, kickoff) => domMatch({
+      id: homeTeam, homeTeam, kickoff, state: "finished", status: "FT",
+    });
+    app.eval('globalThis.Date = class extends Date { static now() { return Date.parse("2026-11-23T12:00:00Z"); } }');
+    const matches = [
+      finished("Ajax", "2026-11-21T20:00:00Z"),
+      finished("Wolves", "2026-11-22T19:00:00Z"),
+      finished("Chelsea", "2026-11-22T15:00:00Z"),
+      finished("Newcastle", "2026-11-22T19:00:00Z"),
+    ];
+    render({ matches, leagues: [{ code: "eng.1", name: "Premier League", matches }] });
+    cardByName("Premier League").click();
+
+    const results = [...app.document.querySelectorAll(".match-section")]
+      .find(section => section.querySelector("h3").textContent === "Results");
+    const names = [...results.querySelectorAll(".match-card")].map(card => card.querySelector(".team-name").textContent);
+    assert.deepEqual(names, ["Newcastle", "Wolves", "Chelsea", "Ajax"]);
+  });
+
   it("merges news and highlights into one section with videos first and safe links", () => {
     app.eval('appendNewsHighlightsSection([{title:"Article",url:"https://www.espn.com/story"}], [{title:"Video",url:"https://www.espn.com/video/clip/1"},{title:"Unsafe",url:"javascript:alert(1)"}])');
     const section = app.document.querySelector('[data-section-key="media"]');

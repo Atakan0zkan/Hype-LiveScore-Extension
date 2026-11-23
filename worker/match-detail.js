@@ -12,6 +12,17 @@ import {
 import { safeHttpsUrl } from "./http.js";
 import { isSafeEventId } from "./match-cache.js";
 
+function validateEspnMatchDetailIdentity(payload, eventId, leagueCode) {
+  const header = payload?.header;
+  const competition = Array.isArray(header?.competitions) ? header.competitions[0] : null;
+  const ids = [header?.id, competition?.id].filter(id => id != null);
+  const otherLeague = header?.league?.slug;
+  if (!ids.length || ids.some(id => id !== eventId && !(Number.isSafeInteger(id) && String(id) === eventId)) ||
+      (otherLeague != null && otherLeague !== leagueCode)) {
+    throw new Error("Upstream match summary does not match the requested fixture");
+  }
+}
+
 function normalizeEspnMatchDetail(payload, context) {
   const header = payload?.header || {};
   const competition = Array.isArray(header.competitions)
@@ -20,8 +31,8 @@ function normalizeEspnMatchDetail(payload, context) {
   const competitors = Array.isArray(competition?.competitors)
     ? competition.competitors
     : [];
-  const home = competitors.find((team) => team.homeAway === "home");
-  const away = competitors.find((team) => team.homeAway === "away");
+  const home = competitors.find((team) => team?.homeAway === "home");
+  const away = competitors.find((team) => team?.homeAway === "away");
   const status = competition?.status || header?.status || {};
 
   return {
@@ -82,7 +93,7 @@ function getTeamRecord(competitor) {
     return "";
   }
 
-  const record = competitor.records.find((row) => row.summary) || competitor.records[0];
+  const record = competitor.records.find((row) => row?.summary) || competitor.records[0];
   return record?.summary || "";
 }
 
@@ -396,22 +407,35 @@ function getRosterPlayers(group) {
 function normalizeRosterPlayer(row) {
   const athlete = row?.athlete || row;
   const position = row?.position || athlete?.position || {};
+  const shortName = rosterText(athlete?.shortName);
+  const name = rosterText(athlete?.displayName) || shortName || rosterText(athlete?.name);
+  const starter = row?.starter === true || row?.didStart === true;
+  const rawPlace = row?.formationPlace;
+  const formationPlace = typeof rawPlace === "string" && /^(?:[1-9]|1[01])$/.test(rawPlace) ? Number(rawPlace) : rawPlace;
 
   return {
     id: athlete?.id ? String(athlete.id) : "",
-    name: athlete?.displayName || athlete?.shortName || athlete?.name || "",
-    shortName: athlete?.shortName || athlete?.displayName || athlete?.name || "",
+    name,
+    shortName: shortName || name,
     position:
-      position?.abbreviation ||
-      position?.displayName ||
-      position?.name ||
-      (typeof position === "string" ? position : ""),
-    jersey: athlete?.jersey || row?.jersey || "",
-    starter: row?.starter === true || row?.didStart === true,
+      rosterText(position?.abbreviation) || rosterText(position?.displayName) ||
+      rosterText(position?.name) || rosterText(position),
+    jersey: normalizeJerseyNumber(row?.jersey) || normalizeJerseyNumber(athlete?.jersey),
+    starter,
+    ...(starter && Number.isInteger(formationPlace) && formationPlace >= 1 && formationPlace <= 11 ? { formationPlace } : {}),
     goals: getRosterMatchCount(row, "totalGoals", 20),
     yellowCards: getRosterMatchCount(row, "yellowCards", 2),
     redCards: getRosterMatchCount(row, "redCards", 1),
   };
+}
+
+function rosterText(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeJerseyNumber(value) {
+  const number = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";
+  return /^\d{1,3}$/.test(number) ? number : "";
 }
 
 function getRosterMatchCount(row, name, maximum) {
@@ -444,8 +468,8 @@ function normalizeHeadToHead(rows) {
       const competitors = Array.isArray(competition?.competitors)
         ? competition.competitors
         : [];
-      const home = competitors.find((team) => team.homeAway === "home");
-      const away = competitors.find((team) => team.homeAway === "away");
+      const home = competitors.find((team) => team?.homeAway === "home");
+      const away = competitors.find((team) => team?.homeAway === "away");
 
       return {
         id: String(event?.id || competition?.id || ""),
@@ -537,4 +561,4 @@ function normalizeLinks(links, eventId = "") {
   ];
 }
 
-export { normalizeEspnMatchDetail };
+export { normalizeEspnMatchDetail, validateEspnMatchDetailIdentity };

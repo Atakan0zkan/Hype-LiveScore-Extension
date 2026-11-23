@@ -36,8 +36,10 @@ export const DETAIL = {
   ],
   stats: [{ label: "Shots", homeValue: "5", awayValue: "10" }, { label: "Possession", homeValue: "35%", awayValue: "65%" }],
   lineups: ["Arsenal", "Chelsea"].map((team, index) => ({
-    team, homeAway: index ? "away" : "home", formation: "4-2-3-1",
-    players: ["G", "LB", "CD-L", "CD-R", "RB", "LM", "RM", "AM-L", "AM", "AM-R", "F"].map((position, i) => ({
+    team, homeAway: index ? "away" : "home", formation: index ? "4-2-3-1" : "4-4-1-1",
+    players: (index
+      ? ["G", "LB", "CD-L", "CD-R", "RB", "LM", "RM", "AM-L", "AM", "AM-R", "F"]
+      : ["G", "LB", "CD-L", "CD-R", "RB", "LM", "RM", "CM-L", "CM-R", "RCF", "F"]).map((position, i) => ({
       id: `${index}-${i}`, name: ["Antonín Kinsky", "Destiny Udogie", "Micky van de Ven", "Kevin Danso", "Pedro Porro", "Conor Gallagher", "João Palhinha", "Mathys Tel", "Rodrigo Bentancur", "Randal Kolo Muani", "Dominic Calvert-Lewin"][i], jersey: String(i + 1), position, starter: true,
       goals: i === 1 ? 5 : i === 10 ? 2 : 0, yellowCards: i === 1 ? 2 : 0, redCards: i === 1 ? 1 : 0,
     })).concat([
