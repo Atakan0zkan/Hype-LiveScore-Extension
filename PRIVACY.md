@@ -1,6 +1,6 @@
 # HypeScore Privacy Notice
 
-Last updated: 2026-10-27
+Last updated: 2026-11-27
 
 Hype - Live Football Scores does not require an account and does not use
 advertising trackers, analytics cookies, or a persistent device identifier.
@@ -19,9 +19,9 @@ Cloudflare also uses the connecting IP address for short-window API abuse
 prevention and rate limiting. Rate-limit keys are not added to Hype product
 analytics, used for advertising, or used to track activity outside the service.
 
-For product reliability and aggregate feature usage, the Worker writes one
-Analytics Engine data point for each existing functional API request. It may
-contain:
+Until November 27, 2026, the Worker wrote Analytics Engine data points for
+product reliability and aggregate feature usage from existing API requests.
+New writes are disabled. Previously collected data may contain:
 
 - requested Hype API feature or endpoint;
 - two-letter country code and Cloudflare data-center code;
@@ -31,7 +31,7 @@ contain:
 - league code when a standings, match-detail, or bracket request includes it;
 - request method and whether the request matched the extension origin policy.
 
-The Hype product analytics dataset does **not** contain raw IP addresses,
+The historical Hype product analytics dataset does **not** contain raw IP addresses,
 persistent or randomly generated client identifiers, event or match IDs,
 accounts, favorites, page URLs, browsing history, or cross-site activity.
 No additional analytics-only request is sent when the popup opens.
@@ -44,15 +44,14 @@ these image requests to send no referrer; they are not product analytics events.
 
 ## Purpose, sharing, and retention
 
-These limited aggregate metrics are used to understand feature demand,
-diagnose errors, monitor response time and cache effectiveness, plan capacity,
-and improve the extension. They are not used for advertising, profiling,
-selling data, or tracking users across services.
+Cloudflare's operational metrics and logs remain available to diagnose
+errors, monitor service performance, and protect the service. They are not
+used for advertising, profiling, selling data, or tracking users across services.
 
 Cloudflare processes the API and analytics infrastructure as the service
 provider. Hype does not send product analytics to Google Analytics or another
-advertising analytics provider. Workers Analytics Engine retains written data
-for three months under Cloudflare's current service limits.
+advertising analytics provider. Previously written Analytics Engine data
+expires under Cloudflare's three-month retention limit.
 
 ## Local extension data
 

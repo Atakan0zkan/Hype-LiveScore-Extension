@@ -117,13 +117,13 @@ describe("static release guards (regression watchlist as code)", () => {
     }
   });
 
-  it("wrangler config keeps Worker name + analytics binding", async () => {
+  it("wrangler config keeps the API rate limiter without product analytics", async () => {
     const raw = await read("wrangler.jsonc");
     const stripped = raw.replace(/\/\/.*$/gm, "");
     const cfg = JSON.parse(stripped);
     assert.equal(cfg.name, "live-score-football");
-    const bindings = JSON.stringify(cfg.analytics_engine_datasets || cfg.bindings || cfg);
-    assert.ok(bindings.includes("hype_usage"), "hype_usage binding present");
+    assert.ok(cfg.ratelimits.some(rule => rule.name === "API_RATE_LIMITER"));
+    assert.equal(cfg.analytics_engine_datasets, undefined);
   });
 
   it("no secrets baked into runtime source", async () => {
